@@ -82,7 +82,7 @@ export function FixHoverTooltip({ target }: FixHoverTooltipProps) {
     <div
       data-testid="fix-hover-tooltip"
       style={{ left, top }}
-      className="pointer-events-none fixed z-50 w-[276px] rounded-xl border border-cyan-400/25 bg-obsidian-950/92 p-3 text-xs text-slate-100 shadow-2xl shadow-black/70 backdrop-blur-xl"
+      className="pointer-events-none fixed z-50 w-[276px] rounded-xl hud-glass-elevated p-3 text-xs text-slate-100"
     >
       <div
         className="mb-2 flex items-start justify-between gap-2 border-l-2 pl-2"

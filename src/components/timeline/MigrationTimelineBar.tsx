@@ -30,7 +30,7 @@ function formatUtcReadout(epochMs: number): string {
   return d.toISOString().replace('T', ' ').slice(0, 19) + ' UTC';
 }
 
-function formatCompactUtcDate(epochMs: number): string {
+function formatCompactUtcDate(epochMs: number, includeYear = false): string {
   if (!Number.isFinite(epochMs)) return '--';
   const d = new Date(epochMs);
   if (Number.isNaN(d.getTime())) return '--';
@@ -38,12 +38,16 @@ function formatCompactUtcDate(epochMs: number): string {
   const day = String(d.getUTCDate()).padStart(2, '0');
   const hh = String(d.getUTCHours()).padStart(2, '0');
   const mm = String(d.getUTCMinutes()).padStart(2, '0');
+  if (includeYear) {
+    return `${d.getUTCFullYear()} ${month} ${day} ${hh}:${mm}Z`;
+  }
   return `${month} ${day} ${hh}:${mm}Z`;
 }
 
 export function MigrationTimelineBar() {
   const controls = usePlaybackControls();
   const animals = useTelemetryStore(selectFilteredAnimals);
+  const allAnimals = useTelemetryStore((s) => s.animals);
   const selectedAnimalId = useTelemetryStore((s) => s.selectedAnimalId);
   const leftDrawerOpen = useTelemetryStore((s) => s.leftDrawerOpen);
   const rightDrawerOpen = useTelemetryStore((s) => s.rightDrawerOpen);
@@ -200,12 +204,37 @@ export function MigrationTimelineBar() {
     }
   };
 
+  const selectedAnimal = useMemo(() => {
+    if (!selectedAnimalId) return null;
+    return (
+      animals.find((a) => a.id === selectedAnimalId) ??
+      allAnimals.find((a) => a.id === selectedAnimalId) ??
+      null
+    );
+  }, [animals, allAnimals, selectedAnimalId]);
+
+  const selectedTrackBounds = useMemo(() => {
+    if (!selectedAnimal) return null;
+    let firstFixMs = Infinity;
+    let lastFixMs = -Infinity;
+    for (const fix of selectedAnimal.fixes) {
+      if (Number.isFinite(fix.timestampMs)) {
+        if (fix.timestampMs < firstFixMs) firstFixMs = fix.timestampMs;
+        if (fix.timestampMs > lastFixMs) lastFixMs = fix.timestampMs;
+      }
+    }
+    if (!Number.isFinite(firstFixMs) || !Number.isFinite(lastFixMs)) return null;
+    return { firstFixMs, lastFixMs };
+  }, [selectedAnimal]);
+
   const startSliderVal = Math.round(
     ((controls.windowStartMs - controls.minMs) / totalSpanMs) * 1000,
   );
   const endSliderVal = Math.round(
     ((controls.windowEndMs - controls.minMs) / totalSpanMs) * 1000,
   );
+
+  const includeYear = totalSpanMs > 180 * DAY_MS;
 
   const isFullSpan =
     Math.abs(controls.windowStartMs - controls.minMs) <= 60_000 &&
@@ -220,6 +249,11 @@ export function MigrationTimelineBar() {
     !isFullSpan &&
     Math.abs(controls.windowEndMs - controls.maxMs) <= 120_000 &&
     Math.abs(controls.windowStartMs - target72h) <= 120_000;
+  const isSelectedTrackSpan =
+    !isFullSpan &&
+    selectedTrackBounds !== null &&
+    Math.abs(controls.windowStartMs - selectedTrackBounds.firstFixMs) <= 120_000 &&
+    Math.abs(controls.windowEndMs - selectedTrackBounds.lastFixMs) <= 120_000;
 
   return (
     <div
@@ -229,7 +263,7 @@ export function MigrationTimelineBar() {
     >
       <section
         data-testid="migration-timeline-bar"
-        className="pointer-events-auto w-full max-w-[860px] rounded-2xl border border-cyan-400/20 bg-obsidian-950/88 px-3.5 py-2.5 text-slate-100 shadow-2xl shadow-black/80 backdrop-blur-xl"
+        className="pointer-events-auto w-full max-w-[860px] rounded-2xl hud-glass-elevated px-3.5 py-2.5 text-slate-100"
       >
         {/* Row 1: Play/Pause + SVG Histogram Scrubber + Imperative UTC Readout */}
         <div className="flex items-center gap-2.5">
@@ -407,6 +441,31 @@ export function MigrationTimelineBar() {
             >
               Last 72h
             </button>
+            <button
+              type="button"
+              data-testid="timeline-window-selected"
+              disabled={!selectedTrackBounds}
+              onClick={() => {
+                if (!selectedTrackBounds) return;
+                playbackClock.setWindowRange(
+                  selectedTrackBounds.firstFixMs,
+                  selectedTrackBounds.lastFixMs,
+                );
+                playbackClock.setScrubMs(selectedTrackBounds.lastFixMs);
+              }}
+              title={
+                selectedAnimal
+                  ? `Snap timeline to ${selectedAnimal.nickname}'s deployment window`
+                  : 'Select an animal to snap timeline to its deployment window'
+              }
+              className={`rounded-md border px-2 py-0.5 text-[10px] font-medium transition disabled:cursor-not-allowed disabled:opacity-40 ${
+                isSelectedTrackSpan
+                  ? 'border-cyan-400/60 bg-cyan-500/20 text-cyan-200'
+                  : 'border-slate-700/70 bg-obsidian-900/70 text-slate-400 hover:text-slate-200'
+              }`}
+            >
+              Selected Track
+            </button>
           </div>
 
           <div className="flex items-center gap-1.5">
@@ -459,7 +518,7 @@ export function MigrationTimelineBar() {
         {/* Row 3: Dual Date-Range Window Sliders */}
         <div className="mt-1.5 flex items-center gap-2 border-t border-slate-800/80 pt-1.5 text-[10px]">
           <span className="shrink-0 font-mono tabular-nums text-slate-400">
-            {formatCompactUtcDate(controls.windowStartMs)}
+            {formatCompactUtcDate(controls.windowStartMs, includeYear)}
           </span>
           <div className="flex flex-1 items-center gap-2">
             <input
@@ -500,7 +559,7 @@ export function MigrationTimelineBar() {
             />
           </div>
           <span className="shrink-0 font-mono tabular-nums text-slate-400">
-            {formatCompactUtcDate(controls.windowEndMs)}
+            {formatCompactUtcDate(controls.windowEndMs, includeYear)}
           </span>
         </div>
       </section>

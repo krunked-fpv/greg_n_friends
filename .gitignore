@@ -1,0 +1,19 @@
+# Dependencies & build artifacts
+node_modules/
+dist/
+*.tsbuildinfo
+
+# Telemetry disk cache & local secrets
+.cache/
+.env
+.env.*
+!.env.example
+
+# Test & QA outputs
+playwright-report/
+test-results/
+
+# Scratch & temporary files
+*.bak
+*.tmp
+*.log

@@ -1,0 +1,45 @@
+{
+  "name": "wildpulse-telemetry-portal",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "WildPulse: Live Wildlife Telemetry & Bio-Logging Portal (Local Express Proxy + GitHub Pages Unleashed)",
+  "scripts": {
+    "dev": "concurrently -k -n SERVER,CLIENT \"tsx server/index.ts\" \"vite\"",
+    "build": "tsc -p tsconfig.app.json --noEmit && tsc -p tsconfig.server.json --noEmit && vite build",
+    "start": "tsx server/index.ts",
+    "preview": "vite preview --port 4173",
+    "harvest:telemetry": "tsx scripts/harvest-telemetry.ts",
+    "seed:generate": "tsx scripts/generate-seed-fleet.ts",
+    "test": "vitest run",
+    "test:e2e": "playwright test",
+    "typecheck": "tsc -p tsconfig.app.json --noEmit && tsc -p tsconfig.server.json --noEmit"
+  },
+  "dependencies": {
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.7",
+    "express": "^4.21.2",
+    "lucide-react": "^0.468.0",
+    "maplibre-gl": "^4.7.1",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "zustand": "^5.0.2"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.49.1",
+    "@types/cors": "^2.8.17",
+    "@types/express": "^5.0.0",
+    "@types/node": "^22.10.2",
+    "@types/react": "^18.3.18",
+    "@types/react-dom": "^18.3.5",
+    "@vitejs/plugin-react": "^4.3.4",
+    "autoprefixer": "^10.4.20",
+    "concurrently": "^9.1.0",
+    "postcss": "^8.4.49",
+    "tailwindcss": "^3.4.17",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.2",
+    "vitest": "^2.1.8",
+    "yaml": "^2.6.1"
+  }
+}

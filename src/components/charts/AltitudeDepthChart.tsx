@@ -17,7 +17,7 @@ export interface AltitudeDepthChartProps {
 }
 
 const CHART_HEIGHT = 136;
-const PAD = { top: 12, right: 10, bottom: 20, left: 44 };
+const PAD = { top: 12, right: 10, bottom: 20, left: 46 };
 
 export function AltitudeDepthChart({ animal }: AltitudeDepthChartProps) {
   const containerRef = useRef<HTMLDivElement | null>(null);
@@ -103,9 +103,16 @@ export function AltitudeDepthChart({ animal }: AltitudeDepthChartProps) {
         ? `${linePath} L${coords[coords.length - 1].x.toFixed(1)},${zeroY.toFixed(1)} L${coords[0].x.toFixed(1)},${zeroY.toFixed(1)} Z`
         : '';
 
-    const yTicks = Array.from(
-      new Set([Math.round(domainMax), 0, Math.round(domainMin)]),
-    );
+    const tickSet = new Set<number>([0]);
+    const topTick = Math.round(domainMax);
+    const botTick = Math.round(domainMin);
+    if (topTick !== 0 && Math.abs(toY(topTick) - zeroY) >= 13) {
+      tickSet.add(topTick);
+    }
+    if (botTick !== 0 && Math.abs(toY(botTick) - zeroY) >= 13) {
+      tickSet.add(botTick);
+    }
+    const yTicks = Array.from(tickSet);
 
     return {
       sorted,
@@ -170,9 +177,11 @@ export function AltitudeDepthChart({ animal }: AltitudeDepthChartProps) {
           const safeVal = Math.round(val ?? 0);
           const prefix = safeVal > 0 ? '+' : '';
           hoverReadoutRef.current.textContent = `${prefix}${safeVal} m • ${formatTooltipUtc(hoveredFix?.timestampMs ?? snap.hoveredFixMs)}`;
+          hoverReadoutRef.current.style.opacity = '1';
         } else {
           hoverCursorRef.current.style.opacity = '0';
           hoverReadoutRef.current.textContent = '';
+          hoverReadoutRef.current.style.opacity = '0';
         }
       }
     };
@@ -206,22 +215,18 @@ export function AltitudeDepthChart({ animal }: AltitudeDepthChartProps) {
       className="hud-card rounded-xl p-2.5 space-y-1.5"
     >
       <div className="flex items-center justify-between gap-2">
-        <div className="flex items-center gap-1.5">
+        <div className="flex items-center gap-1.5 min-w-0">
           {hasDive && !hasAlt ? (
-            <Waves className="h-3.5 w-3.5 text-sky-400" />
+            <Waves className="h-3.5 w-3.5 shrink-0 text-sky-400" />
           ) : (
-            <Mountain className="h-3.5 w-3.5 text-amber-300" />
+            <Mountain className="h-3.5 w-3.5 shrink-0 text-amber-300" />
           )}
-          <span className="hud-section-label text-slate-200">
+          <span className="hud-section-label text-slate-200 truncate">
             Altitude / Ocean Depth
           </span>
         </div>
 
-        <div className="flex items-center gap-2 font-mono text-[10px] tabular-telemetry">
-          <span
-            ref={hoverReadoutRef}
-            className="text-amber-300 font-medium truncate max-w-[135px]"
-          />
+        <div className="flex items-center gap-2 shrink-0 font-mono text-[10px] tabular-telemetry whitespace-nowrap">
           {model ? (
             <span className="text-slate-400">
               {hasAlt && (
@@ -256,7 +261,7 @@ export function AltitudeDepthChart({ animal }: AltitudeDepthChartProps) {
           <svg
             width={width}
             height={104}
-            viewBox={`0 0 ${width} 104`}
+            viewBox={`0 0 ${width} ${104}`}
             className="w-full h-auto block"
             aria-label="Barometric or depth sensor inactive surface baseline"
           >
@@ -298,7 +303,7 @@ export function AltitudeDepthChart({ animal }: AltitudeDepthChartProps) {
               y={44}
               textAnchor="middle"
               fill="#cbd5e1"
-              fontSize="10"
+              fontSize={plotW < 255 ? '8.5' : '9.5'}
               fontWeight="600"
               fontFamily="JetBrains Mono, monospace"
             >
@@ -309,7 +314,7 @@ export function AltitudeDepthChart({ animal }: AltitudeDepthChartProps) {
               y={69}
               textAnchor="middle"
               fill="#64748b"
-              fontSize="8.5"
+              fontSize={plotW < 255 ? '7.5' : '8.5'}
               fontFamily="JetBrains Mono, monospace"
             >
               SURFACE BASELINE REFERENCE (0m MSL)
@@ -318,6 +323,11 @@ export function AltitudeDepthChart({ animal }: AltitudeDepthChartProps) {
         </div>
       ) : (
         <div className="relative">
+          <span
+            ref={hoverReadoutRef}
+            style={{ opacity: 0 }}
+            className="pointer-events-none absolute top-0.5 right-1 z-10 rounded border border-amber-400/40 bg-obsidian-950/90 px-1.5 py-0.5 font-mono text-[9.5px] font-medium text-amber-300 tabular-telemetry shadow-md backdrop-blur-sm whitespace-nowrap"
+          />
           <svg
             ref={svgRef}
             width={width}
@@ -420,24 +430,35 @@ export function AltitudeDepthChart({ animal }: AltitudeDepthChartProps) {
             )}
 
             {/* Clipped strokes for high contrast above & below 0m */}
-            <path
-              d={model.linePath}
-              fill="none"
-              stroke="#fbbf24"
-              strokeWidth="1.65"
-              strokeLinejoin="round"
-              strokeLinecap="round"
-              clipPath={`url(#${aboveClipId})`}
-            />
-            <path
-              d={model.linePath}
-              fill="none"
-              stroke="#38bdf8"
-              strokeWidth="1.65"
-              strokeLinejoin="round"
-              strokeLinecap="round"
-              clipPath={`url(#${belowClipId})`}
-            />
+            {model.points.length === 1 ? (
+              <circle
+                cx={model.toX(model.points[0].timestampMs)}
+                cy={model.toY(model.points[0].value)}
+                r="3"
+                fill={model.points[0].value >= 0 ? '#fbbf24' : '#38bdf8'}
+              />
+            ) : (
+              <>
+                <path
+                  d={model.linePath}
+                  fill="none"
+                  stroke="#fbbf24"
+                  strokeWidth="1.65"
+                  strokeLinejoin="round"
+                  strokeLinecap="round"
+                  clipPath={`url(#${aboveClipId})`}
+                />
+                <path
+                  d={model.linePath}
+                  fill="none"
+                  stroke="#38bdf8"
+                  strokeWidth="1.65"
+                  strokeLinejoin="round"
+                  strokeLinecap="round"
+                  clipPath={`url(#${belowClipId})`}
+                />
+              </>
+            )}
 
             {/* X-Axis Timestamps */}
             <text
@@ -458,7 +479,7 @@ export function AltitudeDepthChart({ animal }: AltitudeDepthChartProps) {
               fontSize="8.5"
               fontFamily="JetBrains Mono, monospace"
             >
-              0m MSL HORIZON
+              {plotW < 210 ? '0m MSL' : '0m MSL HORIZON'}
             </text>
             <text
               x={PAD.left + plotW}

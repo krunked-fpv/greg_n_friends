@@ -151,9 +151,11 @@ export function SpeedTimeChart({ animal }: SpeedTimeChartProps) {
           hoverCursorRef.current.style.opacity = '1';
           hoverDotRef.current.setAttribute('cy', hy.toFixed(1));
           hoverReadoutRef.current.textContent = `${(val ?? 0).toFixed(1)} km/h • ${formatTooltipUtc(hoveredFix?.timestampMs ?? snap.hoveredFixMs)}`;
+          hoverReadoutRef.current.style.opacity = '1';
         } else {
           hoverCursorRef.current.style.opacity = '0';
           hoverReadoutRef.current.textContent = '';
+          hoverReadoutRef.current.style.opacity = '0';
         }
       }
     };
@@ -184,18 +186,14 @@ export function SpeedTimeChart({ animal }: SpeedTimeChartProps) {
       className="hud-card rounded-xl p-2.5 space-y-1.5"
     >
       <div className="flex items-center justify-between gap-2">
-        <div className="flex items-center gap-1.5">
-          <Gauge className="h-3.5 w-3.5 text-cyan-300" />
-          <span className="hud-section-label text-slate-200">
+        <div className="flex items-center gap-1.5 min-w-0">
+          <Gauge className="h-3.5 w-3.5 shrink-0 text-cyan-300" />
+          <span className="hud-section-label text-slate-200 truncate">
             Ground Speed Profile
           </span>
         </div>
 
-        <div className="flex items-center gap-2 font-mono text-[10px] tabular-telemetry">
-          <span
-            ref={hoverReadoutRef}
-            className="text-amber-300 font-medium truncate max-w-[140px]"
-          />
+        <div className="flex items-center gap-2 shrink-0 font-mono text-[10px] tabular-telemetry whitespace-nowrap">
           {model && (
             <span className="text-slate-400">
               MAX <strong className="text-cyan-200">{model.rawMax.toFixed(1)}</strong> km/h
@@ -212,6 +210,11 @@ export function SpeedTimeChart({ animal }: SpeedTimeChartProps) {
         </div>
       ) : (
         <div className="relative">
+          <span
+            ref={hoverReadoutRef}
+            style={{ opacity: 0 }}
+            className="pointer-events-none absolute top-0.5 right-1 z-10 rounded border border-amber-400/40 bg-obsidian-950/90 px-1.5 py-0.5 font-mono text-[9.5px] font-medium text-amber-300 tabular-telemetry shadow-md backdrop-blur-sm whitespace-nowrap"
+          />
           <svg
             ref={svgRef}
             width={width}
@@ -278,14 +281,23 @@ export function SpeedTimeChart({ animal }: SpeedTimeChartProps) {
 
             {/* Speed Area & Curve */}
             {model.areaPath && <path d={model.areaPath} fill={`url(#${gradId})`} />}
-            <path
-              d={model.linePath}
-              fill="none"
-              stroke="#22d3ee"
-              strokeWidth="1.65"
-              strokeLinejoin="round"
-              strokeLinecap="round"
-            />
+            {model.points.length === 1 ? (
+              <circle
+                cx={model.toX(model.points[0].timestampMs)}
+                cy={model.toY(model.points[0].value)}
+                r="3"
+                fill="#22d3ee"
+              />
+            ) : (
+              <path
+                d={model.linePath}
+                fill="none"
+                stroke="#22d3ee"
+                strokeWidth="1.65"
+                strokeLinejoin="round"
+                strokeLinecap="round"
+              />
+            )}
 
             {/* X-Axis Timestamps */}
             <text
@@ -306,7 +318,13 @@ export function SpeedTimeChart({ animal }: SpeedTimeChartProps) {
               fontSize="8.5"
               fontFamily="JetBrains Mono, monospace"
             >
-              {model.derivedRatio > 0.5 ? 'DERIVED VELOCITY' : 'DOPPLER / GPS VELOCITY'}
+              {plotW < 220
+                ? model.derivedRatio > 0.5
+                  ? 'DERIVED'
+                  : 'GPS / DOPPLER'
+                : model.derivedRatio > 0.5
+                  ? 'DERIVED VELOCITY'
+                  : 'DOPPLER / GPS VELOCITY'}
             </text>
             <text
               x={PAD.left + plotW}

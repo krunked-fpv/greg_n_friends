@@ -41,16 +41,17 @@ export function DailyDistanceChart({ animal }: DailyDistanceChartProps) {
     const avgKm = totalKm / Math.max(1, series.length);
 
     const slotW = plotW / Math.max(1, series.length);
-    const barW = clamp(slotW * 0.68, 3, 24);
+    const barW = clamp(slotW * 0.68, Math.min(3, slotW * 0.85), 24);
 
     const bars = series.map((bucket, idx) => {
       const safeDist = Number.isFinite(bucket.distanceKm)
         ? Math.max(0, bucket.distanceKm)
         : 0;
       const barH = (safeDist / maxKm) * plotH;
+      const clampedBarH = Math.max(1.5, barH);
       const centerX = PAD.left + (idx + 0.5) * slotW;
       const x = centerX - barW / 2;
-      const y = PAD.top + plotH - barH;
+      const y = PAD.top + plotH - clampedBarH;
       return {
         bucket,
         idx,
@@ -58,7 +59,7 @@ export function DailyDistanceChart({ animal }: DailyDistanceChartProps) {
         x,
         y,
         width: barW,
-        height: Math.max(1.5, barH),
+        height: clampedBarH,
       };
     });
 
@@ -124,11 +125,13 @@ export function DailyDistanceChart({ animal }: DailyDistanceChartProps) {
             );
             hoverCursorRef.current.style.opacity = '1';
             hoverReadoutRef.current.textContent = `${bar.bucket.dateIso.slice(5, 10)}: ${bar.bucket.distanceKm.toFixed(1)} km`;
+            hoverReadoutRef.current.style.opacity = '1';
             return;
           }
         }
         hoverCursorRef.current.style.opacity = '0';
         hoverReadoutRef.current.textContent = '';
+        hoverReadoutRef.current.style.opacity = '0';
       }
     };
 
@@ -161,18 +164,14 @@ export function DailyDistanceChart({ animal }: DailyDistanceChartProps) {
       className="hud-card rounded-xl p-2.5 space-y-1.5"
     >
       <div className="flex items-center justify-between gap-2">
-        <div className="flex items-center gap-1.5">
-          <BarChart3 className="h-3.5 w-3.5 text-emerald-400" />
-          <span className="hud-section-label text-slate-200">
+        <div className="flex items-center gap-1.5 min-w-0">
+          <BarChart3 className="h-3.5 w-3.5 shrink-0 text-emerald-400" />
+          <span className="hud-section-label text-slate-200 truncate">
             Daily Travel Distance
           </span>
         </div>
 
-        <div className="flex items-center gap-2 font-mono text-[10px] tabular-telemetry">
-          <span
-            ref={hoverReadoutRef}
-            className="text-amber-300 font-medium truncate max-w-[130px]"
-          />
+        <div className="flex items-center gap-2 shrink-0 font-mono text-[10px] tabular-telemetry whitespace-nowrap">
           {model && (
             <span className="text-slate-400">
               AVG <strong className="text-emerald-300">{model.avgKm.toFixed(1)}</strong> km/d
@@ -189,6 +188,11 @@ export function DailyDistanceChart({ animal }: DailyDistanceChartProps) {
         </div>
       ) : (
         <div className="relative">
+          <span
+            ref={hoverReadoutRef}
+            style={{ opacity: 0 }}
+            className="pointer-events-none absolute top-0.5 right-1 z-10 rounded border border-amber-400/40 bg-obsidian-950/90 px-1.5 py-0.5 font-mono text-[9.5px] font-medium text-amber-300 tabular-telemetry shadow-md backdrop-blur-sm whitespace-nowrap"
+          />
           <svg
             ref={svgRef}
             width={width}
@@ -230,6 +234,8 @@ export function DailyDistanceChart({ animal }: DailyDistanceChartProps) {
             {[0, 0.5, 1].map((frac) => {
               const val = model.maxKm * frac;
               const y = PAD.top + (1 - frac) * plotH;
+              const label =
+                val === 0 ? '0' : model.maxKm < 5 ? val.toFixed(1) : String(Math.round(val));
               return (
                 <g key={frac}>
                   <line
@@ -248,7 +254,7 @@ export function DailyDistanceChart({ animal }: DailyDistanceChartProps) {
                     fontSize="9"
                     fontFamily="JetBrains Mono, monospace"
                   >
-                    {Math.round(val)}
+                    {label}
                   </text>
                 </g>
               );
@@ -292,7 +298,7 @@ export function DailyDistanceChart({ animal }: DailyDistanceChartProps) {
               fontSize="8.5"
               fontFamily="JetBrains Mono, monospace"
             >
-              {model.series.length} ACTIVE DAYS
+              {model.series.length} ACTIVE {model.series.length === 1 ? 'DAY' : 'DAYS'}
             </text>
             <text
               x={PAD.left + plotW}

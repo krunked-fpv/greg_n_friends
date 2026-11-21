@@ -14,5 +14,5 @@
     "noUnusedParameters": true,
     "types": ["node"]
   },
-  "include": ["server", "scripts", "src/types", "src/utils/kinematics"]
+  "include": ["server", "scripts", "src/types", "src/data", "src/utils/kinematics"]
 }

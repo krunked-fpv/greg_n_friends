@@ -11,13 +11,13 @@ export function MapLegendOverlay() {
   const animals = useTelemetryStore(selectFilteredAnimals);
 
   const spec = TRACK_LEGEND_SPECS[trackColorMode];
-  const basemapDef = BASEMAPS[basemap];
+  const basemapDef = BASEMAPS[basemap] ?? BASEMAPS['dark-tactical'];
 
   return (
     <aside
       data-testid="map-legend-overlay"
       style={{ left: leftDrawerOpen ? '340px' : '16px' }}
-      className="pointer-events-auto fixed bottom-[132px] z-20 hidden w-[236px] rounded-xl border border-slate-700/60 bg-obsidian-950/82 p-2.5 text-[11px] text-slate-200 shadow-xl shadow-black/50 backdrop-blur-xl transition-all duration-300 md:block"
+      className="pointer-events-auto fixed bottom-[132px] z-20 hidden w-[236px] rounded-xl hud-glass p-2.5 text-[11px] text-slate-200 transition-all duration-300 md:block"
     >
       <div className="mb-1.5 flex items-center justify-between gap-2">
         <div className="flex items-center gap-1.5 font-mono text-[10px] font-semibold uppercase tracking-wider text-cyan-300">

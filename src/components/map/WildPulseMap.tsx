@@ -11,7 +11,11 @@ import {
   useTelemetryStore,
 } from '../../store/telemetryStore';
 import type { BasemapId, TrackColorMode } from '../../types/telemetry';
-import { getBasemapStyle } from '../../utils/geo/basemaps';
+import {
+  BASEMAP_BG_COLORS,
+  BASEMAP_LAYER_GROUPS,
+  buildUnifiedBasemapStyle,
+} from '../../utils/geo/basemaps';
 import {
   buildFleetGeoJsonFromIndex,
   buildPrecomputedTrackIndex,
@@ -36,6 +40,7 @@ const LAYER_IDS = {
   uncertaintyFill: 'wildpulse-uncertainty-fill',
   uncertaintyLine: 'wildpulse-uncertainty-line',
   tracksGlow: 'wildpulse-tracks-glow',
+  tracksCasing: 'wildpulse-tracks-casing',
   tracksLine: 'wildpulse-tracks-line',
   tracksChevrons: 'wildpulse-tracks-chevrons',
   fixesCircle: 'wildpulse-fixes-circle',
@@ -86,6 +91,30 @@ function createChevronImageData(): ImageData | null {
   ctx.stroke();
 
   return ctx.getImageData(0, 0, size, size);
+}
+
+/**
+ * Toggles basemap layer group visibility and background color in-place without
+ * calling map.setStyle(), preserving all active telemetry GeoJSON sources & layers.
+ */
+export function applyBasemapVisibility(
+  map: MapLibreMap,
+  basemap: BasemapId,
+): void {
+  if (!map || !map.getStyle()) return;
+  const bgColor = BASEMAP_BG_COLORS[basemap] ?? BASEMAP_BG_COLORS['dark-tactical'];
+  if (map.getLayer('wildpulse-bg')) {
+    map.setPaintProperty('wildpulse-bg', 'background-color', bgColor);
+  }
+  const groups = Object.keys(BASEMAP_LAYER_GROUPS) as BasemapId[];
+  for (const group of groups) {
+    const visibility = group === basemap ? 'visible' : 'none';
+    for (const layerId of BASEMAP_LAYER_GROUPS[group]) {
+      if (map.getLayer(layerId)) {
+        map.setLayoutProperty(layerId, 'visibility', visibility);
+      }
+    }
+  }
 }
 
 /**
@@ -191,6 +220,28 @@ export function ensureTelemetryLayers(
         'line-width': ['case', ['boolean', ['get', 'isSelected'], false], 8.5, 5.2],
         'line-opacity': ['*', ['coalesce', ['get', 'opacity'], 0.9], 0.22],
         'line-blur': 3,
+      },
+    });
+  }
+
+  if (!map.getLayer(LAYER_IDS.tracksCasing)) {
+    map.addLayer({
+      id: LAYER_IDS.tracksCasing,
+      type: 'line',
+      source: SOURCE_IDS.tracks,
+      layout: {
+        'line-cap': 'round',
+        'line-join': 'round',
+      },
+      paint: {
+        'line-color': '#04070d',
+        'line-width': ['case', ['boolean', ['get', 'isSelected'], false], 5.4, 3.8],
+        'line-opacity': [
+          'case',
+          ['>', ['coalesce', ['get', 'opacity'], 0.92], 0.5],
+          0.74,
+          0.28,
+        ],
       },
     });
   }
@@ -334,8 +385,9 @@ export function ensureTelemetryLayers(
         'text-field': ['get', 'label'],
         'text-font': ['Noto Sans Bold'],
         'text-size': 11,
-        'text-offset': [0, -1.45],
-        'text-anchor': 'bottom',
+        'text-variable-anchor': ['top', 'bottom', 'left', 'right'],
+        'text-radial-offset': 1.1,
+        'text-justify': 'auto',
         'text-allow-overlap': false,
         'text-optional': true,
       },
@@ -462,13 +514,13 @@ export function WildPulseMap() {
     try {
       map = new maplibregl.Map({
         container: mapContainer,
-        style: getBasemapStyle(basemapRef.current),
+        style: buildUnifiedBasemapStyle(basemapRef.current),
         center: [-105, 16],
         zoom: 1.75,
         minZoom: 1.2,
         maxZoom: 18,
         renderWorldCopies: true,
-        attributionControl: { compact: true },
+        attributionControl: false,
       });
     } catch (err) {
       setWebglError(
@@ -484,6 +536,10 @@ export function WildPulseMap() {
       new maplibregl.NavigationControl({ showCompass: true, visualizePitch: false }),
       'top-right',
     );
+    map.addControl(
+      new maplibregl.AttributionControl({ compact: true }),
+      'top-right',
+    );
 
     const reconcileMap = (markStyleLoaded: boolean, markMapLoaded: boolean) => {
       if (markStyleLoaded) styleLoadedRef.current = true;
@@ -492,11 +548,15 @@ export function WildPulseMap() {
       isReconcilingRef.current = true;
       try {
         if (map.getStyle()) {
+          if (markStyleLoaded || appliedBasemapRef.current !== basemapRef.current) {
+            applyBasemapVisibility(map, basemapRef.current);
+            appliedBasemapRef.current = basemapRef.current;
+          }
           ensureTelemetryLayers(map, latestBundleRef.current);
           pushBundleToSources(map, latestBundleRef.current);
         }
       } catch {
-        // Ignore transient style teardown states during rapid basemap swaps
+        // Ignore transient style initialization states
       } finally {
         isReconcilingRef.current = false;
       }
@@ -548,10 +608,27 @@ export function WildPulseMap() {
       }
     };
 
-    const handleHoverLeave = () => {
-      map.getCanvas().style.cursor = '';
+    const hasInteractiveTargetAtPoint = (
+      point: MapLayerMouseEvent['point'],
+      layers: readonly string[],
+    ): boolean => {
+      try {
+        const existing = layers.filter((id) => Boolean(map.getLayer(id)));
+        if (existing.length === 0) return false;
+        return map.queryRenderedFeatures(point, { layers: existing }).length > 0;
+      } catch {
+        return false;
+      }
+    };
+
+    const handleHoverLeave = (e: MapLayerMouseEvent) => {
       setHoveredTarget(null);
       playbackClock.setHoveredFixMs(null);
+      map.getCanvas().style.cursor = hasInteractiveTargetAtPoint(e.point, [
+        LAYER_IDS.tracksLine,
+      ])
+        ? 'pointer'
+        : '';
     };
 
     const handleFeatureClick = (e: MapLayerMouseEvent) => {
@@ -565,10 +642,24 @@ export function WildPulseMap() {
     map.on('mousemove', LAYER_IDS.headCore, (e) => handleInteractiveHover(e, true));
     map.on('mousemove', LAYER_IDS.headHalo, (e) => handleInteractiveHover(e, true));
     map.on('mousemove', LAYER_IDS.fixesCircle, (e) => handleInteractiveHover(e, false));
+    map.on('mousemove', LAYER_IDS.tracksLine, () => {
+      map.getCanvas().style.cursor = 'pointer';
+    });
 
     map.on('mouseleave', LAYER_IDS.headCore, handleHoverLeave);
     map.on('mouseleave', LAYER_IDS.headHalo, handleHoverLeave);
     map.on('mouseleave', LAYER_IDS.fixesCircle, handleHoverLeave);
+    map.on('mouseleave', LAYER_IDS.tracksLine, (e) => {
+      if (
+        !hasInteractiveTargetAtPoint(e.point, [
+          LAYER_IDS.headCore,
+          LAYER_IDS.headHalo,
+          LAYER_IDS.fixesCircle,
+        ])
+      ) {
+        map.getCanvas().style.cursor = '';
+      }
+    });
 
     map.on('click', LAYER_IDS.headCore, handleFeatureClick);
     map.on('click', LAYER_IDS.headHalo, handleFeatureClick);
@@ -621,16 +712,23 @@ export function WildPulseMap() {
     };
   }, [selectAnimal]);
 
-  // Switch basemap StyleJSON seamlessly while preserving active tracks
+  // Toggle basemap layer visibility in-place so telemetry sources & layers survive every switch
   useEffect(() => {
     const map = mapRef.current;
     if (!map) return;
     if (appliedBasemapRef.current === basemap) return;
 
-    appliedBasemapRef.current = basemap;
-    styleLoadedRef.current = false;
+    try {
+      if (map.getStyle()) {
+        applyBasemapVisibility(map, basemap);
+        appliedBasemapRef.current = basemap;
+        ensureTelemetryLayers(map, latestBundleRef.current);
+        pushBundleToSources(map, latestBundleRef.current);
+      }
+    } catch {
+      // Style is still initializing; reconcileMap on load/style.load will apply basemapRef
+    }
     updateDiagnostics(latestBundleRef.current);
-    map.setStyle(getBasemapStyle(basemap));
   }, [basemap]);
 
   // FlyTo triggers from store (animal selection or quick fly-to button)

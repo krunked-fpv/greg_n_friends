@@ -563,8 +563,10 @@ export function buildFleetGeoJsonFromIndex(
   let renderedAnimalCount = 0;
 
   for (const entry of index.entries) {
-    const { animal, isSelected, opacity, nonOutliers, allValidFixes, segments } =
-      entry;
+    const { animal, nonOutliers, allValidFixes, segments } = entry;
+    const isSelected =
+      selectedAnimalId !== null ? animal.id === selectedAnimalId : entry.isSelected;
+    const opacity = selectedAnimalId === null || isSelected ? 0.92 : 0.34;
 
     if (soloAnimalId !== null && animal.id !== soloAnimalId) {
       continue;
@@ -576,18 +578,36 @@ export function buildFleetGeoJsonFromIndex(
 
     const firstFixMs = allValidFixes[0].timestampMs;
     const lastFixMs = allValidFixes[allValidFixes.length - 1].timestampMs;
+    const isOutsideActiveWindow =
+      lastFixMs < windowStartMs || firstFixMs > windowEndMs || firstFixMs > currentMs;
 
-    // Exclude animals whose telemetry falls completely outside the active time window
-    // or before their first fix at currentMs.
-    if (lastFixMs < windowStartMs || firstFixMs > windowEndMs || firstFixMs > currentMs) {
+    // Exclude non-selected animals whose telemetry falls completely outside the active
+    // time window or before their first fix at currentMs. Selected animals remain visible
+    // with their full trajectory and latest fix/beacon even outside the active window.
+    if (isOutsideActiveWindow && !isSelected) {
       continue;
     }
 
+    const renderFullSelectedFallback = isSelected && isOutsideActiveWindow;
     let animalHasContent = false;
 
     for (const seg of segments) {
-      if (seg.properties.endMs >= windowStartMs && seg.properties.endMs <= currentMs) {
-        trackFeatures.push(seg);
+      if (
+        renderFullSelectedFallback ||
+        (seg.properties.endMs >= windowStartMs && seg.properties.endMs <= currentMs)
+      ) {
+        if (seg.properties.isSelected === isSelected && seg.properties.opacity === opacity) {
+          trackFeatures.push(seg);
+        } else {
+          trackFeatures.push({
+            ...seg,
+            properties: {
+              ...seg.properties,
+              isSelected,
+              opacity,
+            },
+          });
+        }
         animalHasContent = true;
       }
     }
@@ -595,14 +615,18 @@ export function buildFleetGeoJsonFromIndex(
     let hoveredFixForAnimal: FixMarkerProperties | null = null;
     for (const fixFeat of entry.fixFeatures) {
       const ts = fixFeat.properties.timestampMs;
-      if (ts >= windowStartMs && ts <= currentMs) {
+      if (renderFullSelectedFallback || (ts >= windowStartMs && ts <= currentMs)) {
         const isHovered = hoveredFixMs !== null && Math.abs(ts - hoveredFixMs) <= 1000;
-        if (isHovered !== fixFeat.properties.isHovered) {
+        if (
+          isHovered !== fixFeat.properties.isHovered ||
+          fixFeat.properties.isSelected !== isSelected
+        ) {
           fixFeatures.push({
             ...fixFeat,
             properties: {
               ...fixFeat.properties,
               isHovered,
+              isSelected,
             },
           });
         } else {
@@ -634,6 +658,7 @@ export function buildFleetGeoJsonFromIndex(
 
     // Append interpolated tip segment from last completed fix up to current interpolated head
     if (
+      !renderFullSelectedFallback &&
       frame &&
       Number.isFinite(frame.lat) &&
       Number.isFinite(frame.lon) &&
@@ -682,40 +707,51 @@ export function buildFleetGeoJsonFromIndex(
       }
     }
 
-    // Active head beacon at currentMs (clamped to latestFix if currentMs > lastFixMs)
-    const useFrame =
+    // Active head beacon at currentMs (clamped to latestFix if currentMs > lastFixMs or out-of-window selected)
+    const latestSelectedFix = renderFullSelectedFallback
+      ? nonOutliers[nonOutliers.length - 1] ??
+        allValidFixes[allValidFixes.length - 1] ??
+        animal.latestFix
+      : null;
+
+    const activeFrame =
+      !renderFullSelectedFallback &&
       frame &&
       Number.isFinite(frame.lat) &&
       Number.isFinite(frame.lon) &&
-      currentMs <= lastFixMs;
+      currentMs <= lastFixMs
+        ? frame
+        : null;
 
-    const headLat = useFrame
-      ? clampLat(frame.lat)
-      : clampLat(fallbackFix ? fallbackFix.lat : animal.latestFix.lat);
-    const headLon = useFrame
-      ? normalizeLon(frame.lon)
-      : normalizeLon(fallbackFix ? fallbackFix.lon : animal.latestFix.lon);
-    const headBearing = useFrame
-      ? frame.bearingDeg
-      : fallbackFix?.headingDeg ?? animal.kinematics.currentBearingDeg;
-    const headSpeed = useFrame
-      ? frame.speedKmh
-      : fallbackFix?.groundSpeedKmh ?? animal.kinematics.currentSpeedKmh;
-    const headAlt = useFrame
-      ? frame.altitudeOrDepthMeters
-      : fallbackFix?.altitudeOrDepthMeters ?? null;
-    const headArgos = useFrame
-      ? frame.argosLc
-      : fallbackFix?.argosLc ?? animal.latestFix.argosLc;
-    const headAccuracy = useFrame
-      ? frame.accuracyRadiusMeters
-      : fallbackFix?.accuracyRadiusMeters ?? animal.latestFix.accuracyRadiusMeters;
-    const headTimestampMs = useFrame
-      ? frame.timestampMs
-      : fallbackFix?.timestampMs ?? animal.latestFix.timestampMs;
-    const headTimestampIso = useFrame
-      ? new Date(frame.timestampMs).toISOString()
-      : fallbackFix?.timestamp ?? animal.latestFix.timestamp;
+    const anchorFix = latestSelectedFix ?? fallbackFix ?? animal.latestFix;
+
+    const headLat = activeFrame
+      ? clampLat(activeFrame.lat)
+      : clampLat(anchorFix.lat);
+    const headLon = activeFrame
+      ? normalizeLon(activeFrame.lon)
+      : normalizeLon(anchorFix.lon);
+    const headBearing = activeFrame
+      ? activeFrame.bearingDeg
+      : anchorFix.headingDeg ?? animal.kinematics.currentBearingDeg;
+    const headSpeed = activeFrame
+      ? activeFrame.speedKmh
+      : anchorFix.groundSpeedKmh ?? animal.kinematics.currentSpeedKmh;
+    const headAlt = activeFrame
+      ? activeFrame.altitudeOrDepthMeters
+      : anchorFix.altitudeOrDepthMeters ?? null;
+    const headArgos = activeFrame
+      ? activeFrame.argosLc
+      : anchorFix.argosLc ?? animal.latestFix.argosLc;
+    const headAccuracy = activeFrame
+      ? activeFrame.accuracyRadiusMeters
+      : anchorFix.accuracyRadiusMeters ?? animal.latestFix.accuracyRadiusMeters;
+    const headTimestampMs = activeFrame
+      ? activeFrame.timestampMs
+      : anchorFix.timestampMs ?? animal.latestFix.timestampMs;
+    const headTimestampIso = activeFrame
+      ? new Date(activeFrame.timestampMs).toISOString()
+      : anchorFix.timestamp ?? animal.latestFix.timestamp;
 
     if (Number.isFinite(headLat) && Number.isFinite(headLon)) {
       headFeatures.push({

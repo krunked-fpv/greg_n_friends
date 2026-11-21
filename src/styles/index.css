@@ -55,36 +55,36 @@
   .hud-glass {
     background: linear-gradient(
       180deg,
-      rgba(10, 18, 34, 0.84) 0%,
-      rgba(6, 11, 22, 0.88) 100%
+      rgba(6, 11, 22, 0.90) 0%,
+      rgba(4, 8, 17, 0.93) 100%
     );
-    backdrop-filter: blur(22px) saturate(145%);
-    -webkit-backdrop-filter: blur(22px) saturate(145%);
-    border: 1px solid rgba(34, 211, 238, 0.16);
+    backdrop-filter: blur(24px) saturate(145%);
+    -webkit-backdrop-filter: blur(24px) saturate(145%);
+    border: 1px solid rgba(34, 211, 238, 0.22);
     box-shadow:
-      0 20px 50px -12px rgba(2, 6, 16, 0.82),
-      inset 0 1px 0 0 rgba(148, 163, 184, 0.09);
+      0 20px 50px -12px rgba(2, 6, 16, 0.86),
+      inset 0 1px 0 0 rgba(148, 163, 184, 0.11);
   }
 
   .hud-glass-elevated {
     background: linear-gradient(
       180deg,
-      rgba(11, 20, 38, 0.94) 0%,
-      rgba(5, 10, 20, 0.96) 100%
+      rgba(8, 14, 26, 0.95) 0%,
+      rgba(4, 8, 17, 0.97) 100%
     );
     backdrop-filter: blur(28px) saturate(160%);
     -webkit-backdrop-filter: blur(28px) saturate(160%);
-    border: 1px solid rgba(34, 211, 238, 0.28);
+    border: 1px solid rgba(34, 211, 238, 0.30);
     box-shadow:
-      0 28px 64px -12px rgba(0, 0, 0, 0.92),
-      0 0 36px -12px rgba(34, 211, 238, 0.18),
-      inset 0 1px 0 0 rgba(186, 230, 253, 0.12);
+      0 28px 64px -12px rgba(0, 0, 0, 0.94),
+      0 0 36px -12px rgba(34, 211, 238, 0.20),
+      inset 0 1px 0 0 rgba(186, 230, 253, 0.14);
   }
 
   .hud-card {
-    background: rgba(12, 21, 37, 0.66);
-    border: 1px solid rgba(148, 163, 184, 0.14);
-    box-shadow: inset 0 1px 0 0 rgba(255, 255, 255, 0.03);
+    background: rgba(10, 18, 34, 0.78);
+    border: 1px solid rgba(148, 163, 184, 0.16);
+    box-shadow: inset 0 1px 0 0 rgba(255, 255, 255, 0.04);
     transition:
       border-color 150ms ease,
       background-color 150ms ease,
@@ -93,24 +93,24 @@
   }
 
   .hud-card:hover {
-    background: rgba(15, 27, 48, 0.84);
-    border-color: rgba(34, 211, 238, 0.34);
+    background: rgba(15, 27, 48, 0.88);
+    border-color: rgba(34, 211, 238, 0.36);
   }
 
   .hud-card-selected {
     background: linear-gradient(
       135deg,
-      rgba(14, 34, 56, 0.9) 0%,
-      rgba(10, 22, 40, 0.9) 100%
+      rgba(14, 34, 56, 0.94) 0%,
+      rgba(10, 22, 40, 0.94) 100%
     );
-    border: 1px solid rgba(34, 211, 238, 0.62);
+    border: 1px solid rgba(34, 211, 238, 0.65);
     box-shadow:
       0 0 22px -6px rgba(34, 211, 238, 0.35),
       inset 0 1px 0 0 rgba(34, 211, 238, 0.18);
   }
 
   .hud-hairline {
-    border-color: rgba(148, 163, 184, 0.14);
+    border-color: rgba(148, 163, 184, 0.16);
   }
 
   .hud-section-label {
@@ -119,7 +119,7 @@
     font-weight: 600;
     letter-spacing: 0.11em;
     text-transform: uppercase;
-    color: rgba(148, 163, 184, 0.85);
+    color: rgba(148, 163, 184, 0.92);
   }
 
   .tabular-telemetry {
@@ -167,4 +167,130 @@
 
 .animate-beacon-dot {
   animation: wildpulse-beacon 2.2s ease-in-out infinite;
+}
+
+/* Dark Obsidian-Cyan Glass Controls for MapLibre GL */
+.maplibregl-map .maplibregl-ctrl-group {
+  background: linear-gradient(
+    180deg,
+    rgba(6, 11, 22, 0.92) 0%,
+    rgba(4, 8, 17, 0.96) 100%
+  );
+  border: 1px solid rgba(34, 211, 238, 0.24);
+  border-radius: 10px;
+  overflow: hidden;
+  box-shadow:
+    0 12px 30px -8px rgba(2, 6, 16, 0.85),
+    inset 0 1px 0 0 rgba(148, 163, 184, 0.1);
+}
+
+.maplibregl-map .maplibregl-ctrl-group:not(:empty) {
+  box-shadow:
+    0 12px 30px -8px rgba(2, 6, 16, 0.85),
+    inset 0 1px 0 0 rgba(148, 163, 184, 0.1);
+}
+
+.maplibregl-map .maplibregl-ctrl-group button {
+  background-color: transparent;
+  color: #e2e8f0;
+  width: 30px;
+  height: 30px;
+  transition: background-color 150ms ease, color 150ms ease;
+}
+
+.maplibregl-map .maplibregl-ctrl-group button + button {
+  border-top: 1px solid rgba(34, 211, 238, 0.16);
+}
+
+.maplibregl-map .maplibregl-ctrl-group button:not(:disabled):hover {
+  background-color: rgba(34, 211, 238, 0.16);
+}
+
+.maplibregl-map .maplibregl-ctrl-group button:focus:focus-visible {
+  outline: none;
+  box-shadow: inset 0 0 0 1.5px rgba(34, 211, 238, 0.78);
+}
+
+.maplibregl-map .maplibregl-ctrl-group button:focus:first-child {
+  border-radius: 9px 9px 0 0;
+}
+
+.maplibregl-map .maplibregl-ctrl-group button:focus:last-child {
+  border-radius: 0 0 9px 9px;
+}
+
+.maplibregl-map .maplibregl-ctrl-group button:disabled .maplibregl-ctrl-icon {
+  opacity: 0.3;
+}
+
+.maplibregl-map
+  .maplibregl-ctrl-group
+  button.maplibregl-ctrl-zoom-in
+  .maplibregl-ctrl-icon {
+  background-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='29' height='29' fill='%23e2e8f0' viewBox='0 0 29 29'%3E%3Cpath d='M14.5 8.5c-.75 0-1.5.75-1.5 1.5v3h-3c-.75 0-1.5.75-1.5 1.5S9.25 16 10 16h3v3c0 .75.75 1.5 1.5 1.5S16 19.75 16 19v-3h3c.75 0 1.5-.75 1.5-1.5S19.75 13 19 13h-3v-3c0-.75-.75-1.5-1.5-1.5'/%3E%3C/svg%3E");
+}
+
+.maplibregl-map
+  .maplibregl-ctrl-group
+  button.maplibregl-ctrl-zoom-out
+  .maplibregl-ctrl-icon {
+  background-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='29' height='29' fill='%23e2e8f0' viewBox='0 0 29 29'%3E%3Cpath d='M10 13c-.75 0-1.5.75-1.5 1.5S9.25 16 10 16h9c.75 0 1.5-.75 1.5-1.5S19.75 13 19 13z'/%3E%3C/svg%3E");
+}
+
+.maplibregl-map
+  .maplibregl-ctrl-group
+  button.maplibregl-ctrl-compass
+  .maplibregl-ctrl-icon {
+  background-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='29' height='29' viewBox='0 0 29 29'%3E%3Cpath fill='%2322d3ee' d='m10.5 14 4-8 4 8z'/%3E%3Cpath fill='%2364748b' d='m10.5 16 4 8 4-8z'/%3E%3C/svg%3E");
+}
+
+.maplibregl-map .maplibregl-ctrl.maplibregl-ctrl-attrib,
+.maplibregl-map .maplibregl-ctrl-attrib.maplibregl-compact {
+  background: linear-gradient(
+    180deg,
+    rgba(6, 11, 22, 0.92) 0%,
+    rgba(4, 8, 17, 0.96) 100%
+  );
+  border: 1px solid rgba(34, 211, 238, 0.22);
+  color: #cbd5e1;
+  box-shadow: 0 8px 24px -6px rgba(2, 6, 16, 0.8);
+  font-size: 10px;
+}
+
+.maplibregl-map .maplibregl-ctrl-attrib.maplibregl-compact-show {
+  padding: 2px 28px 2px 10px;
+}
+
+.maplibregl-map .maplibregl-ctrl-attrib a {
+  color: #67e8f9;
+}
+
+.maplibregl-map .maplibregl-ctrl-attrib a:hover {
+  color: #a5f3fc;
+}
+
+.maplibregl-map .maplibregl-ctrl-attrib .maplibregl-ctrl-attrib-button,
+.maplibregl-map
+  .maplibregl-ctrl-attrib.maplibregl-compact-show
+  .maplibregl-ctrl-attrib-button {
+  background-color: transparent;
+  background-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' fill='%2322d3ee' fill-rule='evenodd' viewBox='0 0 20 20'%3E%3Cpath d='M4 10a6 6 0 1 0 12 0 6 6 0 1 0-12 0m5-3a1 1 0 1 0 2 0 1 1 0 1 0-2 0m0 3a1 1 0 1 1 2 0v3a1 1 0 1 1-2 0'/%3E%3C/svg%3E");
+  background-position: center;
+  background-repeat: no-repeat;
+  background-size: 16px 16px;
+  border-radius: 9999px;
+  transition: background-color 150ms ease;
+}
+
+.maplibregl-map
+  .maplibregl-ctrl-attrib
+  .maplibregl-ctrl-attrib-button:hover {
+  background-color: rgba(34, 211, 238, 0.16);
+}
+
+.maplibregl-map
+  .maplibregl-ctrl-attrib
+  .maplibregl-ctrl-attrib-button:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 1.5px rgba(34, 211, 238, 0.78);
 }

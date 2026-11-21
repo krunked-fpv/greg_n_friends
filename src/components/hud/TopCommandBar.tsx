@@ -115,21 +115,21 @@ export function TopCommandBar({ className = '' }: TopCommandBarProps) {
     >
       <div className="flex flex-wrap xl:flex-nowrap items-center justify-between gap-1.5">
         {/* Brand & Operator Header */}
-        <div className="flex items-center gap-2 min-w-0 shrink-0">
+        <div className="flex items-center gap-2 min-w-0 flex-1 xl:flex-initial">
           <div className="relative flex h-7 w-7 shrink-0 items-center justify-center rounded-lg border border-cyan-400/35 bg-cyan-500/10">
             <span className="absolute inset-0 rounded-lg border border-cyan-400/40 animate-radar-pulse" />
             <Radio className="h-3.5 w-3.5 text-cyan-300" />
           </div>
-          <div className="flex flex-col leading-none">
+          <div className="flex flex-col leading-none min-w-0">
             <h1
               data-testid="operator-header"
-              className="font-mono text-[10.5px] font-bold tracking-[0.04em] text-slate-100 whitespace-nowrap"
+              className="font-mono text-[10.5px] font-bold tracking-[0.04em] text-slate-100 truncate xl:whitespace-nowrap"
             >
               WILDPULSE // BIO-TELEMETRY COMMAND • OPERATOR: GREG
             </h1>
             <div className="mt-0.5 flex items-center gap-2 text-[10px] text-slate-400 tabular-telemetry">
               <span className="inline-flex items-center gap-1 text-cyan-300/90">
-                <Compass className="h-2.5 w-2.5" />
+                <Compass className="h-2.5 w-2.5 shrink-0" />
                 <span data-testid="utc-live-clock">{utcNow}</span>
               </span>
             </div>
@@ -176,7 +176,7 @@ export function TopCommandBar({ className = '' }: TopCommandBarProps) {
         </div>
 
         {/* Basemap & Track Color Controls */}
-        <div className="flex flex-wrap items-center gap-1.5 shrink-0">
+        <div className="flex flex-wrap items-center gap-1.5 min-w-0 max-w-full">
           {/* 4 Basemap Switcher Buttons */}
           <div
             className="flex items-center gap-0.5 rounded-lg border border-slate-700/70 bg-obsidian-950/70 p-0.5"

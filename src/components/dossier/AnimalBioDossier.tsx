@@ -1,7 +1,8 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
   BatteryCharging,
   BookOpen,
+  Clock,
   Compass,
   Crosshair,
   ExternalLink,
@@ -19,6 +20,7 @@ import {
   Wind,
   X,
 } from 'lucide-react';
+import { playbackClock, usePlaybackControls } from '../../store/playbackClock';
 import { useTelemetryStore } from '../../store/telemetryStore';
 import type { AnimalDossier, SolarPhase } from '../../types/telemetry';
 import { AltitudeDepthChart } from '../charts/AltitudeDepthChart';
@@ -66,7 +68,22 @@ export function AnimalBioDossier() {
   const triggerFlyTo = useTelemetryStore((s) => s.triggerFlyTo);
 
   const animal = animals.find((a) => a.id === selectedAnimalId) ?? null;
+  const { windowStartMs, windowEndMs } = usePlaybackControls();
   const [photoError, setPhotoError] = useState<boolean>(false);
+
+  const trackBounds = useMemo(() => {
+    if (!animal || animal.fixes.length === 0) return null;
+    let firstFixMs = Infinity;
+    let lastFixMs = -Infinity;
+    for (const fix of animal.fixes) {
+      if (Number.isFinite(fix.timestampMs)) {
+        if (fix.timestampMs < firstFixMs) firstFixMs = fix.timestampMs;
+        if (fix.timestampMs > lastFixMs) lastFixMs = fix.timestampMs;
+      }
+    }
+    if (!Number.isFinite(firstFixMs) || !Number.isFinite(lastFixMs)) return null;
+    return { firstFixMs, lastFixMs };
+  }, [animal]);
 
   useEffect(() => {
     setPhotoError(false);
@@ -76,6 +93,20 @@ export function AnimalBioDossier() {
     return null;
   }
 
+  const isTrackWindowFocused = Boolean(
+    trackBounds &&
+      Math.abs(windowStartMs - trackBounds.firstFixMs) <= 60_000 &&
+      Math.abs(
+        windowEndMs - Math.max(trackBounds.firstFixMs + 60_000, trackBounds.lastFixMs),
+      ) <= 60_000,
+  );
+
+  const handleFocusTrackWindow = () => {
+    if (!trackBounds) return;
+    playbackClock.setWindowRange(trackBounds.firstFixMs, trackBounds.lastFixMs);
+    playbackClock.setScrubMs(trackBounds.lastFixMs);
+  };
+
   if (!rightDrawerOpen) {
     return (
       <button
@@ -83,7 +114,7 @@ export function AnimalBioDossier() {
         data-testid="reopen-dossier-btn"
         onClick={() => setRightDrawerOpen(true)}
         title="Reopen Animal Bio-Dossier (Key ])"
-        className="pointer-events-auto fixed top-[66px] right-2.5 z-20 hud-glass rounded-xl px-3 py-2 flex items-center gap-2 text-xs font-mono font-semibold text-cyan-200 hover:border-cyan-400/55 transition-colors"
+        className="pointer-events-auto fixed top-[132px] sm:top-[102px] xl:top-[66px] right-2.5 z-20 hud-glass rounded-xl px-3 py-2 flex items-center gap-2 text-xs font-mono font-semibold text-cyan-200 hover:border-cyan-400/55 transition-colors"
       >
         <span
           className="h-2 w-2 rounded-full"
@@ -118,7 +149,7 @@ export function AnimalBioDossier() {
     <aside
       data-testid="animal-bio-dossier"
       aria-label={`Bio-Dossier for ${animal.nickname}`}
-      className="pointer-events-auto fixed top-[66px] bottom-[118px] right-2.5 z-20 w-[392px] max-w-[calc(100vw-20px)] hud-glass rounded-xl flex flex-col overflow-hidden"
+      className="pointer-events-auto fixed top-[132px] sm:top-[102px] xl:top-[66px] bottom-[146px] lg:bottom-[118px] right-2.5 z-20 w-[392px] max-w-[calc(100vw-20px)] hud-glass rounded-xl flex flex-col overflow-hidden"
     >
       {/* Top Hero Banner */}
       <div className="relative shrink-0 h-40 overflow-hidden border-b hud-hairline bg-obsidian-950">
@@ -186,7 +217,7 @@ export function AnimalBioDossier() {
         </div>
 
         {showPhoto && animal.ecology.photoAttribution && (
-          <div className="absolute top-2.5 right-20 max-w-[160px] truncate rounded bg-obsidian-950/70 px-1.5 py-0.5 text-[9px] text-slate-400 backdrop-blur-sm">
+          <div className="absolute top-2.5 right-20 max-w-[125px] truncate rounded bg-obsidian-950/75 px-1.5 py-0.5 text-[9px] text-slate-300 backdrop-blur-sm">
             {animal.ecology.photoAttribution}
           </div>
         )}
@@ -229,44 +260,63 @@ export function AnimalBioDossier() {
       <div className="flex-1 min-h-0 overflow-y-auto hud-scrollbar p-3 space-y-3">
         {/* Biometrics & Sensor Hardware Grid */}
         <section aria-label="Biometrics and Sensor Hardware" className="space-y-1.5">
-          <div className="hud-section-label flex items-center gap-1.5">
-            <Radio className="h-3 w-3 text-cyan-300" />
-            <span>Biometrics &amp; Sensor Hardware</span>
+          <div className="flex items-center justify-between gap-1.5">
+            <div className="hud-section-label flex items-center gap-1.5 min-w-0 tracking-[0.06em]">
+              <Radio className="h-3 w-3 shrink-0 text-cyan-300" />
+              <span className="truncate">Biometrics &amp; Sensor Hardware</span>
+            </div>
+
+            {trackBounds && (
+              <button
+                type="button"
+                data-testid="focus-track-window-btn"
+                onClick={handleFocusTrackWindow}
+                title={`Snap timeline window to ${formatDeploymentDate(animal.deploymentStartIso)} – ${formatDeploymentDate(animal.latestFix.timestamp)}`}
+                className={`inline-flex items-center gap-1 rounded-md border px-1.5 py-0.5 font-mono text-[9.5px] font-semibold transition-colors shrink-0 ${
+                  isTrackWindowFocused
+                    ? 'border-cyan-400/70 bg-cyan-500/20 text-cyan-100 shadow-[0_0_10px_-3px_rgba(34,211,238,0.45)]'
+                    : 'border-cyan-400/40 bg-cyan-500/12 text-cyan-200 hover:bg-cyan-500/20 hover:border-cyan-300/60'
+                }`}
+              >
+                <Clock className="h-2.5 w-2.5 shrink-0" />
+                <span>Focus Track Window</span>
+              </button>
+            )}
           </div>
 
           <div className="grid grid-cols-3 gap-1.5 tabular-telemetry">
-            <div className="hud-card rounded-lg px-2 py-1.5">
+            <div className="hud-card rounded-lg px-2 py-1.5 min-w-0">
               <div className="text-[9px] uppercase text-slate-500">Sex / Stage</div>
               <div className="mt-0.5 truncate text-[11px] font-semibold text-slate-100">
                 {animal.sex || 'Unknown'} • {animal.lifeStage || 'Adult'}
               </div>
             </div>
 
-            <div className="hud-card rounded-lg px-2 py-1.5">
+            <div className="hud-card rounded-lg px-2 py-1.5 min-w-0">
               <div className="flex items-center gap-1 text-[9px] uppercase text-slate-500">
-                <Scale className="h-2.5 w-2.5" />
+                <Scale className="h-2.5 w-2.5 shrink-0" />
                 <span>Mass</span>
               </div>
-              <div className="mt-0.5 text-[11px] font-semibold text-slate-100">
+              <div className="mt-0.5 truncate text-[11px] font-semibold text-slate-100">
                 {animal.massKg !== null && Number.isFinite(animal.massKg)
                   ? `${animal.massKg.toLocaleString('en-US')} kg`
                   : 'N/A'}
               </div>
             </div>
 
-            <div className="hud-card rounded-lg px-2 py-1.5">
+            <div className="hud-card rounded-lg px-2 py-1.5 min-w-0">
               <div className="text-[9px] uppercase text-slate-500">Tag Tech</div>
               <div className="mt-0.5 truncate text-[10.5px] font-semibold text-cyan-200" title={animal.latestFix.sensorType}>
                 {animal.latestFix.sensorType}
               </div>
             </div>
 
-            <div className="hud-card rounded-lg px-2 py-1.5">
+            <div className="hud-card rounded-lg px-2 py-1.5 min-w-0">
               <div className="flex items-center gap-1 text-[9px] uppercase text-slate-500">
-                <BatteryCharging className="h-2.5 w-2.5 text-emerald-400" />
+                <BatteryCharging className="h-2.5 w-2.5 shrink-0 text-emerald-400" />
                 <span>Battery</span>
               </div>
-              <div className="mt-0.5 text-[11px] font-semibold text-emerald-300">
+              <div className="mt-0.5 truncate text-[11px] font-semibold text-emerald-300">
                 {animal.latestFix.tagVoltage !== null &&
                 Number.isFinite(animal.latestFix.tagVoltage)
                   ? `${animal.latestFix.tagVoltage.toFixed(2)} V`
@@ -274,12 +324,12 @@ export function AnimalBioDossier() {
               </div>
             </div>
 
-            <div className="hud-card rounded-lg px-2 py-1.5">
+            <div className="hud-card rounded-lg px-2 py-1.5 min-w-0">
               <div className="flex items-center gap-1 text-[9px] uppercase text-slate-500">
-                <Thermometer className="h-2.5 w-2.5 text-amber-300" />
+                <Thermometer className="h-2.5 w-2.5 shrink-0 text-amber-300" />
                 <span>Tag Temp</span>
               </div>
-              <div className="mt-0.5 text-[11px] font-semibold text-slate-100">
+              <div className="mt-0.5 truncate text-[11px] font-semibold text-slate-100">
                 {animal.latestFix.externalTempC !== null &&
                 Number.isFinite(animal.latestFix.externalTempC)
                   ? `${animal.latestFix.externalTempC.toFixed(1)} °C`
@@ -287,7 +337,7 @@ export function AnimalBioDossier() {
               </div>
             </div>
 
-            <div className="hud-card rounded-lg px-2 py-1.5">
+            <div className="hud-card rounded-lg px-2 py-1.5 min-w-0">
               <div className="text-[9px] uppercase text-slate-500">Argos LC</div>
               <div className="mt-0.5 truncate text-[11px] font-semibold text-slate-100">
                 {animal.latestFix.argosLc
@@ -299,25 +349,25 @@ export function AnimalBioDossier() {
               </div>
             </div>
 
-            <div className="hud-card rounded-lg px-2 py-1.5">
+            <div className="hud-card rounded-lg px-2 py-1.5 min-w-0">
               <div className="text-[9px] uppercase text-slate-500">Deployed</div>
-              <div className="mt-0.5 text-[11px] font-semibold text-slate-200">
+              <div className="mt-0.5 truncate text-[11px] font-semibold text-slate-200">
                 {formatDeploymentDate(animal.deploymentStartIso)}
               </div>
             </div>
 
-            <div className="hud-card rounded-lg px-2 py-1.5">
+            <div className="hud-card rounded-lg px-2 py-1.5 min-w-0">
               <div className="text-[9px] uppercase text-slate-500">Days / Path</div>
-              <div className="mt-0.5 text-[11px] font-semibold text-cyan-200">
+              <div className="mt-0.5 truncate text-[11px] font-semibold text-cyan-200">
                 {animal.kinematics.daysTracked}d •{' '}
                 {Math.round(animal.kinematics.totalDistanceKm).toLocaleString('en-US')} km
               </div>
             </div>
 
-            <div className="hud-card rounded-lg px-2 py-1.5">
+            <div className="hud-card rounded-lg px-2 py-1.5 min-w-0">
               <div className="text-[9px] uppercase text-slate-500">24h Displ.</div>
               <div
-                className="mt-0.5 text-[11px] font-semibold text-emerald-200"
+                className="mt-0.5 truncate text-[11px] font-semibold text-emerald-200"
                 title={`24h path distance: ${formatNumber(animal.kinematics.distance24hKm, 1)} km`}
               >
                 {formatNumber(animal.kinematics.displacement24hKm, 1)} km

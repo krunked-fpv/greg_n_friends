@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { useEffect, useMemo, useRef } from 'react';
 import {
   ChevronLeft,
   ChevronRight,
@@ -71,6 +71,36 @@ export function FleetDiscoveryPanel({ onOpenStudyImporter }: FleetDiscoveryPanel
   const setStudyImporterOpen = useTelemetryStore((s) => s.setStudyImporterOpen);
   const triggerFlyTo = useTelemetryStore((s) => s.triggerFlyTo);
 
+  const cardRefs = useRef<Map<string, HTMLDivElement>>(new Map());
+
+  const nonGuildFilteredAnimals = useMemo(
+    () =>
+      selectFilteredAnimals({
+        ...useTelemetryStore.getState(),
+        animals,
+        guildFilter: 'ALL',
+        recencyFilter,
+        feedFilter,
+        featuredStudyFilter,
+        searchQuery,
+      }),
+    [animals, recencyFilter, feedFilter, featuredStudyFilter, searchQuery],
+  );
+
+  const guildCounts = useMemo(() => {
+    const counts: Record<EcologicalGuild | 'ALL', number> = {
+      ALL: nonGuildFilteredAnimals.length,
+      AVIAN: 0,
+      MARINE: 0,
+      TERRESTRIAL: 0,
+      REPTILE: 0,
+    };
+    for (const animal of nonGuildFilteredAnimals) {
+      counts[animal.guild] += 1;
+    }
+    return counts;
+  }, [nonGuildFilteredAnimals]);
+
   const filteredAnimals = useMemo(
     () =>
       selectFilteredAnimals({
@@ -91,6 +121,13 @@ export function FleetDiscoveryPanel({ onOpenStudyImporter }: FleetDiscoveryPanel
       searchQuery,
     ],
   );
+
+  useEffect(() => {
+    if (!selectedAnimalId || !leftDrawerOpen) return;
+    const cardEl = cardRefs.current.get(selectedAnimalId);
+    if (!cardEl || typeof cardEl.scrollIntoView !== 'function') return;
+    cardEl.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+  }, [selectedAnimalId, leftDrawerOpen]);
 
   const featuredStudies = useMemo(() => {
     const map = new Map<string, string>();
@@ -136,7 +173,7 @@ export function FleetDiscoveryPanel({ onOpenStudyImporter }: FleetDiscoveryPanel
         onClick={toggleLeftDrawer}
         aria-expanded={false}
         title="Expand Fleet Discovery Panel (Key [)"
-        className="pointer-events-auto fixed top-[66px] left-2.5 z-20 hud-glass rounded-xl px-3 py-2 flex items-center gap-2 text-xs font-mono font-semibold text-cyan-200 hover:border-cyan-400/50 transition-colors"
+        className="pointer-events-auto fixed top-[132px] sm:top-[102px] xl:top-[66px] left-2.5 z-20 hud-glass rounded-xl px-3 py-2 flex items-center gap-2 text-xs font-mono font-semibold text-cyan-200 hover:border-cyan-400/50 transition-colors"
       >
         <Filter className="h-3.5 w-3.5 text-cyan-300" />
         <span>FLEET</span>
@@ -152,7 +189,7 @@ export function FleetDiscoveryPanel({ onOpenStudyImporter }: FleetDiscoveryPanel
     <aside
       data-testid="fleet-discovery-panel"
       aria-label="Fleet Discovery Panel"
-      className="pointer-events-auto fixed top-[66px] bottom-[118px] left-2.5 z-20 w-[336px] max-w-[calc(100vw-20px)] hud-glass rounded-xl flex flex-col overflow-hidden"
+      className="pointer-events-auto fixed top-[132px] sm:top-[102px] xl:top-[66px] bottom-[146px] lg:bottom-[118px] left-2.5 z-20 w-[336px] max-w-[calc(100vw-20px)] hud-glass rounded-xl flex flex-col overflow-hidden"
     >
       {/* Header */}
       <div className="shrink-0 flex items-center justify-between gap-2 border-b hud-hairline px-3 py-2">
@@ -161,7 +198,7 @@ export function FleetDiscoveryPanel({ onOpenStudyImporter }: FleetDiscoveryPanel
           <h2 className="font-mono text-[11px] font-bold tracking-[0.1em] uppercase text-slate-100 truncate">
             Fleet Discovery
           </h2>
-          <span className="rounded bg-cyan-500/15 border border-cyan-400/30 px-1.5 py-0.5 font-mono text-[10px] font-semibold text-cyan-300 tabular-telemetry">
+          <span className="shrink-0 rounded bg-cyan-500/15 border border-cyan-400/30 px-1.5 py-0.5 font-mono text-[10px] font-semibold text-cyan-300 tabular-telemetry">
             {filteredAnimals.length}/{animals.length}
           </span>
         </div>
@@ -171,11 +208,12 @@ export function FleetDiscoveryPanel({ onOpenStudyImporter }: FleetDiscoveryPanel
             type="button"
             data-testid="open-study-importer-btn"
             onClick={handleOpenImporter}
+            aria-label="Import Movebank Study"
             title="Import live Movebank Study by ID"
-            className="inline-flex items-center gap-1 rounded-lg border border-cyan-400/40 bg-cyan-500/15 px-2 py-1 font-mono text-[10px] font-semibold text-cyan-200 hover:bg-cyan-500/25 hover:border-cyan-300/60 transition-colors"
+            className="inline-flex items-center gap-1 rounded-lg border border-cyan-400/40 bg-cyan-500/15 px-2 py-1 font-mono text-[10px] font-semibold text-cyan-200 hover:bg-cyan-500/25 hover:border-cyan-300/60 transition-colors whitespace-nowrap"
           >
-            <DownloadCloud className="h-3 w-3" />
-            <span>Import Movebank Study</span>
+            <DownloadCloud className="h-3 w-3 shrink-0" />
+            <span>Import Study</span>
           </button>
 
           <button
@@ -227,13 +265,23 @@ export function FleetDiscoveryPanel({ onOpenStudyImporter }: FleetDiscoveryPanel
                 data-testid={`guild-filter-${pill.id}`}
                 onClick={() => setGuildFilter(pill.id)}
                 aria-pressed={active}
-                className={`rounded-md border px-2 py-0.5 text-[10px] font-medium transition-colors ${
+                className={`inline-flex items-center gap-1 rounded-md border px-2 py-0.5 text-[10px] font-medium transition-colors ${
                   active
                     ? 'border-cyan-400/60 bg-cyan-500/20 text-cyan-200'
                     : 'border-slate-700/60 bg-obsidian-900/60 text-slate-400 hover:text-slate-200 hover:border-slate-600'
                 }`}
               >
-                {pill.label}
+                <span>{pill.label}</span>
+                <span
+                  data-testid={`guild-count-${pill.id}`}
+                  className={`tabular-telemetry rounded px-1 text-[9px] font-semibold leading-[1.35] ${
+                    active
+                      ? 'bg-cyan-400/20 text-cyan-100'
+                      : 'bg-slate-800/80 text-slate-300'
+                  }`}
+                >
+                  {guildCounts[pill.id]}
+                </span>
               </button>
             );
           })}
@@ -300,7 +348,7 @@ export function FleetDiscoveryPanel({ onOpenStudyImporter }: FleetDiscoveryPanel
             value={featuredStudyFilter}
             onChange={(e) => setFeaturedStudyFilter(e.target.value)}
             aria-label="Filter by featured active study"
-            className="w-full rounded-md border border-slate-700/70 bg-obsidian-950/90 px-2 py-1 font-sans text-[11px] text-slate-200 focus:border-cyan-400/60 focus:outline-none truncate"
+            className="min-w-0 flex-1 rounded-md border border-slate-700/70 bg-obsidian-950/90 px-2 py-1 font-sans text-[11px] text-slate-200 focus:border-cyan-400/60 focus:outline-none truncate"
           >
             <option value="ALL">All Featured Studies ({featuredStudies.length})</option>
             {featuredStudies.map((study) => (
@@ -365,6 +413,13 @@ export function FleetDiscoveryPanel({ onOpenStudyImporter }: FleetDiscoveryPanel
             return (
               <div
                 key={animal.id}
+                ref={(el) => {
+                  if (el) {
+                    cardRefs.current.set(animal.id, el);
+                  } else {
+                    cardRefs.current.delete(animal.id);
+                  }
+                }}
                 role="button"
                 tabIndex={0}
                 data-testid={`fleet-card-${animal.id}`}
@@ -395,7 +450,7 @@ export function FleetDiscoveryPanel({ onOpenStudyImporter }: FleetDiscoveryPanel
                       </span>
                     </div>
 
-                    <div className="mt-0.5 flex items-baseline gap-1.5 truncate">
+                    <div className="mt-0.5 flex items-baseline gap-1.5 overflow-hidden">
                       <span className="truncate text-[11px] font-medium text-slate-300">
                         {animal.commonName}
                       </span>

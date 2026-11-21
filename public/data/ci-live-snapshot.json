@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-11-21T03:08:35.024Z",
+  "generatedAt": "2026-11-21T03:26:06.363Z",
   "connectionMode": "CI_SNAPSHOT",
   "animals": [
     {
@@ -2567,7 +2567,7 @@
         "currentSpeedKmh": 0.01,
         "currentBearingDeg": 186.9,
         "currentCardinal": "S",
-        "pingFreshnessMs": 579884888026,
+        "pingFreshnessMs": 579885939365,
         "pingFreshnessLabel": "18y 141d ago",
         "daysTracked": 8.7,
         "dailyDistanceSeries": [
@@ -5383,7 +5383,7 @@
         "currentSpeedKmh": 1.28,
         "currentBearingDeg": 82,
         "currentCardinal": "E",
-        "pingFreshnessMs": 263299164024,
+        "pingFreshnessMs": 263300215363,
         "pingFreshnessLabel": "8y 127d ago",
         "daysTracked": 95.5,
         "dailyDistanceSeries": [
@@ -7677,7 +7677,7 @@
         "currentSpeedKmh": 1.52,
         "currentBearingDeg": 245.7,
         "currentCardinal": "WSW",
-        "pingFreshnessMs": 532189292024,
+        "pingFreshnessMs": 532190343363,
         "pingFreshnessLabel": "16y 319d ago",
         "daysTracked": 18.6,
         "dailyDistanceSeries": [
@@ -10715,7 +10715,7 @@
         "currentSpeedKmh": 7.57,
         "currentBearingDeg": 322.6,
         "currentCardinal": "NW",
-        "pingFreshnessMs": 579008881024,
+        "pingFreshnessMs": 579009932363,
         "pingFreshnessLabel": "18y 131d ago",
         "daysTracked": 11.3,
         "dailyDistanceSeries": [

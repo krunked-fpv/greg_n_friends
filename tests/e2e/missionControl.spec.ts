@@ -44,11 +44,12 @@ test.describe('Gate 4: WildPulse Mission Control Full-Stack E2E', () => {
     });
   });
 
-  test('validates HUD, WebGL map, filters, Bio-Dossier, basemaps, playback, and Movebank license-md5 importer', async ({
+  test('validates HUD, 35-species roster, WebGL map, basemaps, historical focus, expanded species charts, playback, and Movebank license-md5 importer', async ({
     page,
   }) => {
     const pageErrors: string[] = [];
     const appConsoleErrors: string[] = [];
+    const cartoRequests: string[] = [];
 
     page.on('pageerror', (err) => {
       pageErrors.push(err.message);
@@ -59,6 +60,12 @@ test.describe('Gate 4: WildPulse Mission Control Full-Stack E2E', () => {
         if (!isBenignThirdPartyConsoleError(text)) {
           appConsoleErrors.push(text);
         }
+      }
+    });
+    page.on('request', (req) => {
+      const reqUrl = req.url();
+      if (reqUrl.includes('basemaps.cartocdn.com/dark_all')) {
+        cartoRequests.push(reqUrl);
       }
     });
 
@@ -77,29 +84,73 @@ test.describe('Gate 4: WildPulse Mission Control Full-Stack E2E', () => {
     await expect
       .poll(
         async () =>
-          page.evaluate(
-            () => (window as DiagWindow).__WILDPULSE_MAP_DIAGNOSTICS__?.renderedSegmentCount ?? 0,
-          ),
+          page.evaluate(() => ({
+            segments:
+              (window as DiagWindow).__WILDPULSE_MAP_DIAGNOSTICS__?.renderedSegmentCount ?? 0,
+            heads:
+              (window as DiagWindow).__WILDPULSE_MAP_DIAGNOSTICS__?.renderedHeadCount ?? 0,
+          })),
         { timeout: 20000 },
       )
-      .toBeGreaterThan(0);
+      .toEqual({
+        segments: expect.any(Number),
+        heads: expect.any(Number),
+      });
 
-    // 2. Fleet hydration & Guild / Ping Recency filter pills
+    const initialDiag = await page.evaluate(
+      () => (window as DiagWindow).__WILDPULSE_MAP_DIAGNOSTICS__,
+    );
+    expect(initialDiag?.basemap).toBe('dark-tactical');
+    expect(initialDiag?.renderedSegmentCount ?? 0).toBeGreaterThan(0);
+    expect(initialDiag?.renderedHeadCount ?? 0).toBeGreaterThan(0);
+
+    // 2. 35-species deduplicated fleet hydration, guild counts & Recency filter pills
     const fleetCards = page.locator('[data-testid^="fleet-card-"]');
     await expect
       .poll(async () => fleetCards.count(), { timeout: 20000 })
-      .toBeGreaterThanOrEqual(10);
+      .toBeGreaterThanOrEqual(34);
 
     const allCount = await fleetCards.count();
+    const cardTestIds = await fleetCards.evaluateAll((els) =>
+      els.map((el) => el.getAttribute('data-testid') ?? ''),
+    );
+    expect(cardTestIds.length).toBe(allCount);
+    expect(new Set(cardTestIds).size).toBe(allCount);
+
+    const guildAllText = (await page.getByTestId('guild-count-ALL').innerText()).trim();
+    const guildAvianText = (await page.getByTestId('guild-count-AVIAN').innerText()).trim();
+    const guildMarineText = (await page.getByTestId('guild-count-MARINE').innerText()).trim();
+    const guildTerrestrialText = (
+      await page.getByTestId('guild-count-TERRESTRIAL').innerText()
+    ).trim();
+    const guildReptileText = (await page.getByTestId('guild-count-REPTILE').innerText()).trim();
+    expect(guildAllText).toMatch(/^\d+$/);
+    expect(guildAvianText).toMatch(/^\d+$/);
+    expect(guildMarineText).toMatch(/^\d+$/);
+    expect(guildTerrestrialText).toMatch(/^\d+$/);
+    expect(guildReptileText).toMatch(/^\d+$/);
+
+    const guildAllNum = Number(guildAllText);
+    const guildSum =
+      Number(guildAvianText) +
+      Number(guildMarineText) +
+      Number(guildTerrestrialText) +
+      Number(guildReptileText);
+    expect(guildAllNum).toBe(allCount);
+    expect(guildSum).toBe(allCount);
+    expect(Number(guildAvianText)).toBeGreaterThan(0);
+    expect(Number(guildMarineText)).toBeGreaterThan(0);
+    expect(Number(guildTerrestrialText)).toBeGreaterThan(0);
+    expect(Number(guildReptileText)).toBeGreaterThan(0);
 
     await page.getByTestId('guild-filter-AVIAN').click();
     const avianCount = await fleetCards.count();
-    expect(avianCount).toBeGreaterThan(0);
+    expect(avianCount).toBe(Number(guildAvianText));
     expect(avianCount).toBeLessThan(allCount);
 
     await page.getByTestId('guild-filter-REPTILE').click();
     const reptileCount = await fleetCards.count();
-    expect(reptileCount).toBeGreaterThan(0);
+    expect(reptileCount).toBe(Number(guildReptileText));
     expect(reptileCount).toBeLessThan(allCount);
 
     await page.getByTestId('guild-filter-ALL').click();
@@ -123,7 +174,7 @@ test.describe('Gate 4: WildPulse Mission Control Full-Stack E2E', () => {
     await page.getByTestId('recency-filter-ALL').click();
     await expect(fleetCards).toHaveCount(allCount);
 
-    // 3. Animal Bio-Dossier inspection for kalani-7, luna-01, and null-altitude track if present
+    // 3. Animal Bio-Dossier inspection for kalani-7, luna-01, expanded kuaka-e7, and null-altitude track
     await page.getByTestId('fleet-card-kalani-7').click();
     const dossier = page.getByTestId('animal-bio-dossier');
     await expect(dossier).toBeVisible();
@@ -147,6 +198,24 @@ test.describe('Gate 4: WildPulse Mission Control Full-Stack E2E', () => {
     expect(lunaDossierText).not.toMatch(/\bNaN\b/);
     expect(lunaDossierText).not.toMatch(/\bundefined\b/);
 
+    // Expanded 35-species roster: Bar-tailed Godwit (kuaka-e7) with all 3 telemetry charts
+    await page.getByTestId('fleet-card-kuaka-e7').click();
+    await expect(dossier).toContainText('Limosa lapponica');
+    await expect(dossier).toContainText('Bar-tailed Godwit');
+    await expect(dossier.getByTestId('chart-speed')).toBeVisible();
+    await expect(dossier.getByTestId('chart-altitude-depth')).toBeVisible();
+    await expect(dossier.getByTestId('chart-daily-distance')).toBeVisible();
+    expect(await dossier.getByTestId('chart-speed').locator('svg path').count()).toBeGreaterThan(0);
+    expect(
+      await dossier.getByTestId('chart-altitude-depth').locator('svg path').count(),
+    ).toBeGreaterThan(0);
+    expect(
+      await dossier.getByTestId('chart-daily-distance').locator('svg rect').count(),
+    ).toBeGreaterThan(0);
+    const kuakaText = await dossier.innerText();
+    expect(kuakaText).not.toMatch(/\bNaN\b/);
+    expect(kuakaText).not.toMatch(/\bundefined\b/);
+
     const albatrossCard = page.getByTestId('fleet-card-mb-2911040-4262-84830876');
     if ((await albatrossCard.count()) > 0) {
       await albatrossCard.click();
@@ -157,8 +226,8 @@ test.describe('Gate 4: WildPulse Mission Control Full-Stack E2E', () => {
       expect(albText).not.toMatch(/\bundefined\b/);
     }
 
-    // 4. Basemap switcher & Track Color modes preserve rendered WebGL segments
-    const basemaps = ['satellite', 'ocean', 'terrain', 'dark-tactical'] as const;
+    // 4. Basemap switcher & Track Color modes preserve rendered WebGL segments & heads across all 35 tracks
+    const basemaps = ['satellite', 'terrain', 'ocean', 'dark-tactical'] as const;
     for (const bm of basemaps) {
       await page.getByTestId(`basemap-btn-${bm}`).click();
       await expect
@@ -168,14 +237,21 @@ test.describe('Gate 4: WildPulse Mission Control Full-Stack E2E', () => {
               basemap: (window as DiagWindow).__WILDPULSE_MAP_DIAGNOSTICS__?.basemap,
               segments:
                 (window as DiagWindow).__WILDPULSE_MAP_DIAGNOSTICS__?.renderedSegmentCount ?? 0,
+              heads:
+                (window as DiagWindow).__WILDPULSE_MAP_DIAGNOSTICS__?.renderedHeadCount ?? 0,
             })),
           { timeout: 10000 },
         )
-        .toEqual({ basemap: bm, segments: expect.any(Number) });
-      const segs = await page.evaluate(
-        () => (window as DiagWindow).__WILDPULSE_MAP_DIAGNOSTICS__?.renderedSegmentCount ?? 0,
+        .toEqual({
+          basemap: bm,
+          segments: expect.any(Number),
+          heads: expect.any(Number),
+        });
+      const diag = await page.evaluate(
+        () => (window as DiagWindow).__WILDPULSE_MAP_DIAGNOSTICS__,
       );
-      expect(segs).toBeGreaterThan(0);
+      expect(diag?.renderedSegmentCount ?? 0).toBeGreaterThan(0);
+      expect(diag?.renderedHeadCount ?? 0).toBeGreaterThan(0);
     }
 
     const trackModes = ['altitude', 'recency', 'animal', 'speed'] as const;
@@ -188,18 +264,66 @@ test.describe('Gate 4: WildPulse Mission Control Full-Stack E2E', () => {
               mode: (window as DiagWindow).__WILDPULSE_MAP_DIAGNOSTICS__?.trackColorMode,
               segments:
                 (window as DiagWindow).__WILDPULSE_MAP_DIAGNOSTICS__?.renderedSegmentCount ?? 0,
+              heads:
+                (window as DiagWindow).__WILDPULSE_MAP_DIAGNOSTICS__?.renderedHeadCount ?? 0,
             })),
           { timeout: 10000 },
         )
-        .toEqual({ mode, segments: expect.any(Number) });
-      const segs = await page.evaluate(
-        () => (window as DiagWindow).__WILDPULSE_MAP_DIAGNOSTICS__?.renderedSegmentCount ?? 0,
+        .toEqual({
+          mode,
+          segments: expect.any(Number),
+          heads: expect.any(Number),
+        });
+      const diag = await page.evaluate(
+        () => (window as DiagWindow).__WILDPULSE_MAP_DIAGNOSTICS__,
       );
-      expect(segs).toBeGreaterThan(0);
+      expect(diag?.renderedSegmentCount ?? 0).toBeGreaterThan(0);
+      expect(diag?.renderedHeadCount ?? 0).toBeGreaterThan(0);
     }
 
-    // 5. Playback clock, Follow-Cam toggle, and Timeline DOM hygiene
+    // 5. Last 14d timeline filter + historical live animal selection + Focus Track Window
+    await page.getByTestId('timeline-window-14d').click();
+    const spottedSealCard = page.getByTestId('fleet-card-atn-174822-spotted-seal');
+    const hasSpottedSeal = (await spottedSealCard.count()) > 0;
+    const historicalCard = hasSpottedSeal ? spottedSealCard : albatrossCard;
+    expect(await historicalCard.count()).toBeGreaterThan(0);
+
+    await historicalCard.click();
+    await expect(dossier).toBeVisible();
+    await expect(dossier).toContainText(
+      hasSpottedSeal ? 'Phoca largha' : 'Phoebastria irrorata',
+    );
+    await expect
+      .poll(
+        async () =>
+          page.evaluate(() => ({
+            segments:
+              (window as DiagWindow).__WILDPULSE_MAP_DIAGNOSTICS__?.renderedSegmentCount ?? 0,
+            heads:
+              (window as DiagWindow).__WILDPULSE_MAP_DIAGNOSTICS__?.renderedHeadCount ?? 0,
+          })),
+        { timeout: 10000 },
+      )
+      .toEqual({
+        segments: expect.any(Number),
+        heads: expect.any(Number),
+      });
+    const histDiag = await page.evaluate(
+      () => (window as DiagWindow).__WILDPULSE_MAP_DIAGNOSTICS__,
+    );
+    expect(histDiag?.renderedSegmentCount ?? 0).toBeGreaterThan(0);
+    expect(histDiag?.renderedHeadCount ?? 0).toBeGreaterThan(0);
+
     const timeReadout = page.getByTestId('timeline-current-time');
+    await page.getByTestId('focus-track-window-btn').click();
+    const expectedDeploymentYear = hasSpottedSeal ? '2018' : '2008';
+    await expect(timeReadout).toContainText(`${expectedDeploymentYear}-`);
+    await expect(page.getByTestId('migration-timeline-bar')).toContainText(
+      expectedDeploymentYear,
+    );
+    await page.getByTestId('timeline-window-full').click();
+
+    // 6. Playback clock, Follow-Cam toggle, and Timeline DOM hygiene
     const initialTimeText = (await timeReadout.innerText()).trim();
     expect(initialTimeText).toContain('UTC');
 
@@ -427,6 +551,7 @@ test.describe('Gate 4: WildPulse Mission Control Full-Stack E2E', () => {
     expect(importedText).not.toMatch(/\bNaN\b/);
     expect(importedText).not.toMatch(/\bundefined\b/);
 
+    expect(cartoRequests).toEqual([]);
     expect(pageErrors).toEqual([]);
     expect(appConsoleErrors).toEqual([]);
   });

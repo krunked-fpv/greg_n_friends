@@ -68,6 +68,7 @@ test.describe('Challenge 5: GitHub Pages Subpath (/wildpulse/) Static Unleashed 
     const pageErrors: string[] = [];
     const appConsoleErrors: string[] = [];
     const unexpectedRootRequests: string[] = [];
+    const cartoRequests: string[] = [];
 
     page.on('pageerror', (err) => {
       pageErrors.push(err.message);
@@ -91,6 +92,9 @@ test.describe('Challenge 5: GitHub Pages Subpath (/wildpulse/) Static Unleashed 
     });
     page.on('request', (req) => {
       const reqUrl = req.url();
+      if (reqUrl.includes('basemaps.cartocdn.com/dark_all')) {
+        cartoRequests.push(reqUrl);
+      }
       if (
         reqUrl.startsWith(`http://127.0.0.1:${SUBPATH_PORT}/`) &&
         !reqUrl.startsWith(SUBPATH_URL)
@@ -109,19 +113,66 @@ test.describe('Challenge 5: GitHub Pages Subpath (/wildpulse/) Static Unleashed 
     const fleetCards = page.locator('[data-testid^="fleet-card-"]');
     await expect
       .poll(async () => fleetCards.count(), { timeout: 20000 })
-      .toBeGreaterThanOrEqual(10);
+      .toBeGreaterThanOrEqual(34);
+
+    const cardCount = await fleetCards.count();
+    const cardTestIds = await fleetCards.evaluateAll((els) =>
+      els.map((el) => el.getAttribute('data-testid') ?? ''),
+    );
+    expect(cardTestIds.length).toBe(cardCount);
+    expect(new Set(cardTestIds).size).toBe(cardCount);
+
+    await expect(page.getByTestId('guild-count-ALL')).toHaveText(String(cardCount));
 
     const mapCanvas = page.locator('[data-testid="wildpulse-map-container"] canvas');
     await expect(mapCanvas).toBeVisible();
     await expect
       .poll(
         async () =>
-          page.evaluate(
-            () => (window as DiagWindow).__WILDPULSE_MAP_DIAGNOSTICS__?.renderedSegmentCount ?? 0,
-          ),
+          page.evaluate(() => ({
+            segments:
+              (window as DiagWindow).__WILDPULSE_MAP_DIAGNOSTICS__?.renderedSegmentCount ?? 0,
+            heads:
+              (window as DiagWindow).__WILDPULSE_MAP_DIAGNOSTICS__?.renderedHeadCount ?? 0,
+          })),
         { timeout: 20000 },
       )
-      .toBeGreaterThan(0);
+      .toEqual({
+        segments: expect.any(Number),
+        heads: expect.any(Number),
+      });
+    const initialDiag = await page.evaluate(
+      () => (window as DiagWindow).__WILDPULSE_MAP_DIAGNOSTICS__,
+    );
+    expect(initialDiag?.renderedSegmentCount ?? 0).toBeGreaterThan(0);
+    expect(initialDiag?.renderedHeadCount ?? 0).toBeGreaterThan(0);
+
+    // Switch across all 4 basemaps and verify MapLibre retains rendered tracks & heads
+    for (const bm of ['satellite', 'terrain', 'ocean', 'dark-tactical'] as const) {
+      await page.getByTestId(`basemap-btn-${bm}`).click();
+      await expect
+        .poll(
+          async () =>
+            page.evaluate(() => ({
+              basemap: (window as DiagWindow).__WILDPULSE_MAP_DIAGNOSTICS__?.basemap,
+              segments:
+                (window as DiagWindow).__WILDPULSE_MAP_DIAGNOSTICS__?.renderedSegmentCount ?? 0,
+              heads:
+                (window as DiagWindow).__WILDPULSE_MAP_DIAGNOSTICS__?.renderedHeadCount ?? 0,
+            })),
+          { timeout: 10000 },
+        )
+        .toEqual({
+          basemap: bm,
+          segments: expect.any(Number),
+          heads: expect.any(Number),
+        });
+      const diag = await page.evaluate(
+        () => (window as DiagWindow).__WILDPULSE_MAP_DIAGNOSTICS__,
+      );
+      expect(diag?.renderedSegmentCount ?? 0).toBeGreaterThan(0);
+      expect(diag?.renderedHeadCount ?? 0).toBeGreaterThan(0);
+    }
 
     // Open kalani-7 Bio-Dossier and verify clean rendering
     await page.getByTestId('fleet-card-kalani-7').click();
@@ -138,23 +189,37 @@ test.describe('Challenge 5: GitHub Pages Subpath (/wildpulse/) Static Unleashed 
 
     // Scrub playback across the timeline scrubber after drawer layout transition completes
     const scrubber = page.getByTestId('timeline-scrubber');
-    await page.waitForTimeout(380);
-    const box = await scrubber.boundingBox();
-    expect(box).not.toBeNull();
+    let prevWidth = -1;
+    await expect
+      .poll(
+        async () => {
+          const cur = await scrubber.boundingBox();
+          const w = cur?.width ?? 0;
+          const settled = w > 0 && Math.abs(w - prevWidth) < 0.5;
+          prevWidth = w;
+          return settled;
+        },
+        { timeout: 5000, intervals: [150, 150, 150] },
+      )
+      .toBe(true);
 
     const timeReadout = page.getByTestId('timeline-current-time');
     const beforeScrub = (await timeReadout.innerText()).trim();
 
+    const earlyBox = await scrubber.boundingBox();
+    expect(earlyBox).not.toBeNull();
     await scrubber.click({
-      position: { x: Math.round(box!.width * 0.2), y: Math.round(box!.height / 2) },
+      position: { x: Math.round(earlyBox!.width * 0.2), y: Math.round(earlyBox!.height / 2) },
     });
     await page.waitForTimeout(100);
     const earlyScrub = (await timeReadout.innerText()).trim();
     expect(earlyScrub).toContain('UTC');
     expect(earlyScrub).not.toBe(beforeScrub);
 
+    const lateBox = await scrubber.boundingBox();
+    expect(lateBox).not.toBeNull();
     await scrubber.click({
-      position: { x: Math.round(box!.width * 0.8), y: Math.round(box!.height / 2) },
+      position: { x: Math.round(lateBox!.width * 0.8), y: Math.round(lateBox!.height / 2) },
     });
     await page.waitForTimeout(100);
     const lateScrub = (await timeReadout.innerText()).trim();
@@ -166,6 +231,7 @@ test.describe('Challenge 5: GitHub Pages Subpath (/wildpulse/) Static Unleashed 
     expect(timelineText).not.toMatch(/\bNaN\b/);
     expect(timelineText).not.toMatch(/\bundefined\b/);
 
+    expect(cartoRequests).toEqual([]);
     expect(unexpectedRootRequests).toEqual([]);
     expect(pageErrors).toEqual([]);
     expect(appConsoleErrors).toEqual([]);

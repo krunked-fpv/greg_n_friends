@@ -5,6 +5,8 @@ import {
   haversineDistanceKm as serverHaversineDistanceKm,
   normalizeTelemetryFixes as serverNormalizeTelemetryFixes,
 } from '../../server/kinematics.ts';
+import { CURATED_ATN_DATASETS } from '../../src/data/curatedAtnDatasets.ts';
+import { mergeAndDedupeFleet } from '../../src/services/telemetryClient.ts';
 import type { AnimalDossier, FleetResponse, TelemetryFix } from '../../src/types/telemetry.ts';
 import {
   splitSegmentAtAntimeridian,
@@ -22,6 +24,11 @@ import {
 
 function loadFallbackFleet(): FleetResponse {
   const filePath = path.resolve(process.cwd(), 'public', 'data', 'fallback-fleet.json');
+  return JSON.parse(fs.readFileSync(filePath, 'utf8')) as FleetResponse;
+}
+
+function loadCiLiveSnapshot(): FleetResponse {
+  const filePath = path.resolve(process.cwd(), 'public', 'data', 'ci-live-snapshot.json');
   return JSON.parse(fs.readFileSync(filePath, 'utf8')) as FleetResponse;
 }
 
@@ -51,49 +58,86 @@ describe('Challenge 3: Antimeridian (±180°) Haversine, polyline splitting & in
     );
   });
 
-  it('verifies kalani-7 from fallback-fleet.json crosses ±180° without spikes or >180° line segments', () => {
+  it('verifies kalani-7 and kuaka-e7 cross ±180° without spikes or >180° line segments', () => {
     const fleet = loadFallbackFleet();
-    const kalani = fleet.animals.find((a) => a.id === 'kalani-7');
-    expect(kalani).toBeDefined();
+    for (const animalId of ['kalani-7', 'kuaka-e7'] as const) {
+      const animal = fleet.animals.find((a) => a.id === animalId);
+      expect(animal, `Expected ${animalId} in fallback-fleet.json`).toBeDefined();
 
-    const rawCrossings = kalani!.fixes.filter(
-      (fix, idx) => idx > 0 && Math.abs(fix.lon - kalani!.fixes[idx - 1]!.lon) > 180,
-    );
-    expect(rawCrossings.length).toBeGreaterThanOrEqual(1);
+      const rawCrossings = animal!.fixes.filter(
+        (fix, idx) => idx > 0 && Math.abs(fix.lon - animal!.fixes[idx - 1]!.lon) > 180,
+      );
+      expect(rawCrossings.length).toBeGreaterThanOrEqual(1);
 
-    // Re-run normalization and kinematics to confirm crossing is NOT misclassified as a spike
-    const normalized = normalizeTelemetryFixes(kalani!.fixes, kalani!.guild);
-    const nonSpikeFixes = normalized.filter((f) => !f.isOutlierSpike);
-    expect(nonSpikeFixes.length).toBe(kalani!.fixes.length);
+      // Re-run normalization and kinematics to confirm crossing is NOT misclassified as a spike
+      const normalized = normalizeTelemetryFixes(animal!.fixes, animal!.guild);
+      const nonSpikeFixes = normalized.filter((f) => !f.isOutlierSpike);
+      expect(nonSpikeFixes.length).toBe(animal!.fixes.length);
 
-    for (let i = 1; i < normalized.length; i += 1) {
-      expect(normalized[i]!.segmentDistanceKm).toBeLessThan(250);
-    }
+      for (let i = 1; i < normalized.length; i += 1) {
+        expect(normalized[i]!.segmentDistanceKm).toBeLessThan(250);
+      }
 
-    const coords: GeoCoord[] = normalized.map((f) => [f.lon, f.lat]);
-    const splitLines = splitTrackAtAntimeridian(coords);
-    expect(splitLines.length).toBeGreaterThanOrEqual(2);
+      const coords: GeoCoord[] = normalized.map((f) => [f.lon, f.lat]);
+      const splitLines = splitTrackAtAntimeridian(coords);
+      expect(splitLines.length).toBeGreaterThanOrEqual(2);
 
-    // Every split polyline must stay inside [-180, 180] with zero segments jumping |lon2 - lon1| > 180
-    let hitPositiveBoundary = false;
-    let hitNegativeBoundary = false;
-    for (const line of splitLines) {
-      expect(line.length).toBeGreaterThanOrEqual(2);
-      for (let i = 0; i < line.length; i += 1) {
-        const [lon, lat] = line[i]!;
-        expect(lon).toBeGreaterThanOrEqual(-180);
-        expect(lon).toBeLessThanOrEqual(180);
-        expect(lat).toBeGreaterThanOrEqual(-90);
-        expect(lat).toBeLessThanOrEqual(90);
-        if (lon === 180) hitPositiveBoundary = true;
-        if (lon === -180) hitNegativeBoundary = true;
-        if (i > 0) {
-          expect(Math.abs(lon - line[i - 1]![0])).toBeLessThanOrEqual(180);
+      // Every split polyline must stay inside [-180, 180] with zero segments jumping |lon2 - lon1| > 180
+      let hitPositiveBoundary = false;
+      let hitNegativeBoundary = false;
+      for (const line of splitLines) {
+        expect(line.length).toBeGreaterThanOrEqual(2);
+        for (let i = 0; i < line.length; i += 1) {
+          const [lon, lat] = line[i]!;
+          expect(lon).toBeGreaterThanOrEqual(-180);
+          expect(lon).toBeLessThanOrEqual(180);
+          expect(lat).toBeGreaterThanOrEqual(-90);
+          expect(lat).toBeLessThanOrEqual(90);
+          if (lon === 180) hitPositiveBoundary = true;
+          if (lon === -180) hitNegativeBoundary = true;
+          if (i > 0) {
+            expect(Math.abs(lon - line[i - 1]![0])).toBeLessThanOrEqual(180);
+          }
         }
       }
+      expect(hitPositiveBoundary).toBe(true);
+      expect(hitNegativeBoundary).toBe(true);
     }
-    expect(hitPositiveBoundary).toBe(true);
-    expect(hitNegativeBoundary).toBe(true);
+  });
+
+  it('verifies 35-species unified roster, NW Atlantic luna-01 coordinates, and zero-duplicate snapshot/seed merge', () => {
+    const fallback = loadFallbackFleet();
+    const snapshot = loadCiLiveSnapshot();
+
+    expect(fallback.animals.length).toBeGreaterThanOrEqual(27);
+    expect(fallback.animals.length).toBe(27);
+    const fallbackIds = new Set(fallback.animals.map((a) => a.id));
+    expect(fallbackIds.size).toBe(fallback.animals.length);
+
+    expect(snapshot.animals).toHaveLength(8);
+    const snapshotIds = new Set(snapshot.animals.map((a) => a.id));
+    expect(snapshotIds.size).toBe(8);
+    expect(snapshotIds.has('mb-2911040-4262-84830876')).toBe(true);
+    for (const dataset of CURATED_ATN_DATASETS) {
+      expect(snapshotIds.has(dataset.id)).toBe(true);
+    }
+
+    const merged = mergeAndDedupeFleet([...snapshot.animals, ...fallback.animals]);
+    expect(merged).toHaveLength(35);
+    expect(new Set(merged.map((a) => a.id)).size).toBe(35);
+
+    const luna = fallback.animals.find((a) => a.id === 'luna-01');
+    expect(luna).toBeDefined();
+    expect(luna!.latestFix.lon).toBeLessThan(-50);
+    expect(luna!.latestFix.lon).toBeGreaterThan(-80);
+    for (const fix of luna!.fixes) {
+      expect(fix.lon).toBeLessThan(-50);
+      expect(fix.lon).toBeGreaterThan(-80);
+    }
+
+    const kuaka = fallback.animals.find((a) => a.id === 'kuaka-e7');
+    expect(kuaka).toBeDefined();
+    expect(kuaka!.commonName).toBe('Bar-tailed Godwit');
   });
 
   it('splits synthetic eastward and westward ±180° tracks cleanly without >180° jumps', () => {

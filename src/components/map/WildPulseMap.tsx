@@ -482,6 +482,23 @@ export function WildPulseMap() {
   trackIndexRef.current = trackIndex;
 
   const latestBundleRef = useRef<FleetGeoJsonBundle>(EMPTY_BUNDLE);
+  const lastPushedBundleRef = useRef<FleetGeoJsonBundle | null>(null);
+
+  const pushIfChanged = (map: MapLibreMap, bundle: FleetGeoJsonBundle) => {
+    if (lastPushedBundleRef.current === bundle) return;
+    pushBundleToSources(map, bundle);
+    lastPushedBundleRef.current = bundle;
+  };
+
+  const syncLayersAndSources = (map: MapLibreMap, bundle: FleetGeoJsonBundle) => {
+    const hadTracksSource = Boolean(map.getSource(SOURCE_IDS.tracks));
+    ensureTelemetryLayers(map, bundle);
+    if (!hadTracksSource) {
+      lastPushedBundleRef.current = bundle;
+    } else {
+      pushIfChanged(map, bundle);
+    }
+  };
 
   const updateDiagnostics = (bundle: FleetGeoJsonBundle) => {
     if (typeof window === 'undefined') return;
@@ -541,19 +558,22 @@ export function WildPulseMap() {
       'top-right',
     );
 
-    const reconcileMap = (markStyleLoaded: boolean, markMapLoaded: boolean) => {
+    const reconcileMap = (
+      markStyleLoaded: boolean,
+      markMapLoaded: boolean,
+      forceBasemapApply = false,
+    ) => {
       if (markStyleLoaded) styleLoadedRef.current = true;
       if (markMapLoaded) mapLoadedRef.current = true;
       if (isReconcilingRef.current) return;
       isReconcilingRef.current = true;
       try {
         if (map.getStyle()) {
-          if (markStyleLoaded || appliedBasemapRef.current !== basemapRef.current) {
+          if (forceBasemapApply || appliedBasemapRef.current !== basemapRef.current) {
             applyBasemapVisibility(map, basemapRef.current);
             appliedBasemapRef.current = basemapRef.current;
           }
-          ensureTelemetryLayers(map, latestBundleRef.current);
-          pushBundleToSources(map, latestBundleRef.current);
+          syncLayersAndSources(map, latestBundleRef.current);
         }
       } catch {
         // Ignore transient style initialization states
@@ -562,7 +582,7 @@ export function WildPulseMap() {
       }
       updateDiagnostics(latestBundleRef.current);
 
-      if (mapLoadedRef.current && pendingFlyToRef.current) {
+      if ((mapLoadedRef.current || styleLoadedRef.current) && pendingFlyToRef.current) {
         const pending = pendingFlyToRef.current;
         pendingFlyToRef.current = null;
         map.flyTo({
@@ -574,9 +594,17 @@ export function WildPulseMap() {
       }
     };
 
-    map.on('load', () => reconcileMap(true, true));
-    map.on('style.load', () => reconcileMap(true, mapLoadedRef.current));
-    map.on('styledata', () => reconcileMap(styleLoadedRef.current, mapLoadedRef.current));
+    map.on('load', () => reconcileMap(true, true, true));
+    map.on('style.load', () => reconcileMap(true, mapLoadedRef.current, true));
+    map.on('styledata', () => {
+      if (
+        appliedBasemapRef.current !== basemapRef.current ||
+        !map.getSource(SOURCE_IDS.tracks) ||
+        lastPushedBundleRef.current !== latestBundleRef.current
+      ) {
+        reconcileMap(styleLoadedRef.current, mapLoadedRef.current, false);
+      }
+    });
     map.on('idle', () => updateDiagnostics(latestBundleRef.current));
     map.on('error', () => {
       // Suppress transient offline tile/glyph aborts so pageerror/console stay clean
@@ -722,8 +750,7 @@ export function WildPulseMap() {
       if (map.getStyle()) {
         applyBasemapVisibility(map, basemap);
         appliedBasemapRef.current = basemap;
-        ensureTelemetryLayers(map, latestBundleRef.current);
-        pushBundleToSources(map, latestBundleRef.current);
+        syncLayersAndSources(map, latestBundleRef.current);
       }
     } catch {
       // Style is still initializing; reconcileMap on load/style.load will apply basemapRef
@@ -737,7 +764,7 @@ export function WildPulseMap() {
     lastFlyNonceRef.current = flyToRequest.nonce;
 
     const map = mapRef.current;
-    if (!map || !mapLoadedRef.current) {
+    if (!map || !(mapLoadedRef.current || styleLoadedRef.current)) {
       pendingFlyToRef.current = {
         lat: flyToRequest.lat,
         lon: flyToRequest.lon,
@@ -774,8 +801,7 @@ export function WildPulseMap() {
     if (map) {
       try {
         if (map.getStyle()) {
-          ensureTelemetryLayers(map, bundle);
-          pushBundleToSources(map, bundle);
+          syncLayersAndSources(map, bundle);
         }
       } catch {
         // Style is still initializing; reconcileMap on 'load'/'style.load' will attach layers
@@ -820,7 +846,7 @@ export function WildPulseMap() {
         return;
       }
       const map = mapRef.current;
-      if (!map || !mapLoadedRef.current) return;
+      if (!map || !(mapLoadedRef.current || styleLoadedRef.current)) return;
 
       const targetId = selectedAnimalIdRef.current;
       const targetHead =
@@ -865,7 +891,7 @@ export function WildPulseMap() {
 
       const map = mapRef.current;
       if (map && map.getStyle()) {
-        pushBundleToSources(map, bundle);
+        pushIfChanged(map, bundle);
       }
       updateDiagnostics(bundle);
       applyFollowCam(bundle, snapshot.isPlaying, snapshot.followCam);

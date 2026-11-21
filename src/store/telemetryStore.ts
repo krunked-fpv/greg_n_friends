@@ -193,12 +193,34 @@ export const useTelemetryStore = create<TelemetryStoreState>((set, get) => ({
     })),
 }));
 
+let cachedFilterArgs: {
+  animals: AnimalDossier[];
+  guildFilter: EcologicalGuild | 'ALL';
+  recencyFilter: PingRecencyFilter;
+  feedFilter: FeedStatus | 'ALL';
+  featuredStudyFilter: string | 'ALL';
+  searchQuery: string;
+} | null = null;
+let cachedFilterResult: AnimalDossier[] = [];
+
 export function selectFilteredAnimals(state: TelemetryStoreState): AnimalDossier[] {
+  if (
+    cachedFilterArgs &&
+    cachedFilterArgs.animals === state.animals &&
+    cachedFilterArgs.guildFilter === state.guildFilter &&
+    cachedFilterArgs.recencyFilter === state.recencyFilter &&
+    cachedFilterArgs.feedFilter === state.feedFilter &&
+    cachedFilterArgs.featuredStudyFilter === state.featuredStudyFilter &&
+    cachedFilterArgs.searchQuery === state.searchQuery
+  ) {
+    return cachedFilterResult;
+  }
+
   const query = state.searchQuery.trim().toLowerCase();
   const DAY_MS = 24 * 3600 * 1000;
   const SEVEN_DAYS_MS = 7 * DAY_MS;
 
-  return state.animals.filter((animal) => {
+  const filtered = state.animals.filter((animal) => {
     if (state.guildFilter !== 'ALL' && animal.guild !== state.guildFilter) {
       return false;
     }
@@ -241,4 +263,15 @@ export function selectFilteredAnimals(state: TelemetryStoreState): AnimalDossier
     }
     return true;
   });
+
+  cachedFilterArgs = {
+    animals: state.animals,
+    guildFilter: state.guildFilter,
+    recencyFilter: state.recencyFilter,
+    feedFilter: state.feedFilter,
+    featuredStudyFilter: state.featuredStudyFilter,
+    searchQuery: state.searchQuery,
+  };
+  cachedFilterResult = filtered;
+  return filtered;
 }

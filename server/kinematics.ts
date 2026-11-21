@@ -568,6 +568,62 @@ const CURATED_SPECIES: Record<string, CuratedSpeciesProfile> = {
     summaryExtract:
       'Matrilineal deep-diving delphinid that performs nocturnal mesopelagic foraging dives targeting squid along island escarpments.',
   },
+  'Erignathus barbatus': {
+    commonName: 'Bearded Seal',
+    guild: 'MARINE',
+    iucnStatus: 'LC',
+    class: 'Mammalia',
+    order: 'Carnivora',
+    family: 'Phocidae',
+    photoUrl:
+      'https://thumb.wikimedia.org/wikipedia/commons/thumb/7/78/Bearded_Seal.jpg/330px-Bearded_Seal.jpg?utm_source=en.wikipedia.org&utm_campaign=api&utm_content=thumbnail',
+    photoAttribution: 'Wikimedia Commons',
+    wikiUrl: 'https://en.wikipedia.org/wiki/Bearded_seal',
+    summaryExtract:
+      'Benthic-foraging Arctic phocid tracked across seasonal sea-ice breakups between the Bering, Chukchi, and Beaufort Seas.',
+  },
+  'Pseudorca crassidens': {
+    commonName: 'False Killer Whale',
+    guild: 'MARINE',
+    iucnStatus: 'NT',
+    class: 'Mammalia',
+    order: 'Artiodactyla',
+    family: 'Delphinidae',
+    photoUrl:
+      'https://thumb.wikimedia.org/wikipedia/commons/thumb/9/99/Pseudoorca_Crassidens_-_False_Killer_Whale.jpg/330px-Pseudoorca_Crassidens_-_False_Killer_Whale.jpg?utm_source=en.wikipedia.org&utm_campaign=api&utm_content=thumbnail',
+    photoAttribution: 'Wikimedia Commons',
+    wikiUrl: 'https://en.wikipedia.org/wiki/False_killer_whale',
+    summaryExtract:
+      'Pelagic social odontocete monitored across seamounts and marine monument reefs of the Northwestern Hawaiian Islands.',
+  },
+  'Phoca vitulina': {
+    commonName: 'Pacific Harbor Seal',
+    guild: 'MARINE',
+    iucnStatus: 'LC',
+    class: 'Mammalia',
+    order: 'Carnivora',
+    family: 'Phocidae',
+    photoUrl:
+      'https://thumb.wikimedia.org/wikipedia/commons/thumb/4/48/Common_seal_%28Phoca_vitulina%29_2.jpg/330px-Common_seal_%28Phoca_vitulina%29_2.jpg?utm_source=en.wikipedia.org&utm_campaign=api&utm_content=thumbnail',
+    photoAttribution: 'Wikimedia Commons',
+    wikiUrl: 'https://en.wikipedia.org/wiki/Harbor_seal',
+    summaryExtract:
+      'Coastal and fjord pinniped foraging along glacial tidewater passages and continental shelf eddies in the Gulf of Alaska.',
+  },
+  'Histriophoca fasciata': {
+    commonName: 'Ribbon Seal',
+    guild: 'MARINE',
+    iucnStatus: 'LC',
+    class: 'Mammalia',
+    order: 'Carnivora',
+    family: 'Phocidae',
+    photoUrl:
+      'https://thumb.wikimedia.org/wikipedia/commons/thumb/a/a3/Ribbon-seal-male_Josh_London_NOAAedit_%2816086029928%29_%28cropped%29.jpg/330px-Ribbon-seal-male_Josh_London_NOAAedit_%2816086029928%29_%28cropped%29.jpg?utm_source=en.wikipedia.org&utm_campaign=api&utm_content=thumbnail',
+    photoAttribution: 'Wikimedia Commons / Josh London (NOAA)',
+    wikiUrl: 'https://en.wikipedia.org/wiki/Ribbon_seal',
+    summaryExtract:
+      'Ice-associated pelagic seal dispersing across the deep Aleutian Basin and Bering Sea shelf break after spring molt.',
+  },
 };
 
 export function inferGuildFromTaxon(scientificName: string): EcologicalGuild {
@@ -579,8 +635,11 @@ export function inferGuildFromTaxon(scientificName: string): EcologicalGuild {
     lower.includes('seal') ||
     lower.includes('shark') ||
     lower.includes('phoca') ||
+    lower.includes('erignathus') ||
+    lower.includes('histriophoca') ||
     lower.includes('mesoplodon') ||
     lower.includes('globicephala') ||
+    lower.includes('pseudorca') ||
     lower.includes('carcharodon') ||
     lower.includes('balaen') ||
     lower.includes('megaptera')

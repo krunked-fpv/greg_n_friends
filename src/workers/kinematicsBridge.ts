@@ -7,7 +7,7 @@ import {
   normalizeFleetBatch,
   type KinematicsWorkerRequest,
   type KinematicsWorkerResponse,
-} from './kinematics.worker';
+} from '../utils/kinematics/fleetNormalizer';
 
 interface PendingNormalize {
   resolve: (animals: AnimalDossier[]) => void;

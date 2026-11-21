@@ -1,16 +1,18 @@
+import {
+  CURATED_ATN_DATASETS,
+  type CuratedAtnDatasetSpec,
+} from '../data/curatedAtnDatasets';
 import type {
   AnimalDossier,
   ConnectionMode,
-  EcologicalGuild,
   FeedStatus,
   FleetResponse,
-  IucnStatus,
   ProxyHealthResponse,
   SensorType,
-  StudyAttribution,
   StudyImportResponse,
   TelemetryFix,
 } from '../types/telemetry';
+import { normalizeFleetBatch } from '../utils/kinematics/fleetNormalizer';
 import {
   getArgosUncertaintyMeters,
   normalizeArgosLocationClass,
@@ -26,94 +28,6 @@ export interface TelemetryClientOptions {
   atnTimeoutMs?: number;
   skipWorker?: boolean;
 }
-
-interface AtnDatasetDescriptor {
-  datasetId: string;
-  animalId: string;
-  nickname: string;
-  commonName: string;
-  scientificName: string;
-  guild: EcologicalGuild;
-  colorHex: string;
-  iucnStatus: IucnStatus;
-  summaryExtract: string;
-  attribution: StudyAttribution;
-}
-
-const ATN_CURATED_DATASETS: readonly AtnDatasetDescriptor[] = [
-  {
-    datasetId: 'atn_174822_spotted-seal_trajectory_20180414-20181103',
-    animalId: 'atn-174822',
-    nickname: 'Bering Seal #174822',
-    commonName: 'Spotted Seal',
-    scientificName: 'Phoca largha',
-    guild: 'MARINE',
-    colorHex: '#38bdf8',
-    iucnStatus: 'LC',
-    summaryExtract:
-      'Pagophilic pinniped tracked across Bering Sea pack-ice margins and coastal haul-outs via Wildlife Computers SPOT satellite telemetry.',
-    attribution: {
-      studyTitle:
-        'Spotted seal (Phoca largha) Bering Sea satellite telemetry (PTT 174822)',
-      principalInvestigators: 'Josh London',
-      institution:
-        'Marine Mammal Laboratory, NOAA Alaska Fisheries Science Center',
-      studyUrl:
-        'https://atn.ioos.us/erddap/tabledap/atn_174822_spotted-seal_trajectory_20180414-20181103.html',
-      licenseTerms:
-        'NOAA / U.S. Animal Telemetry Network (ATN) public scientific telemetry archive. Acknowledge ATN & NOAA AFSC.',
-      licenseMd5Required: false,
-    },
-  },
-  {
-    datasetId:
-      'atn_94821_blainvilles-beaked-whale_trajectory_20091221-20100111',
-    animalId: 'atn-94821',
-    nickname: 'Kona Beaked #94821',
-    commonName: "Blainville's Beaked Whale",
-    scientificName: 'Mesoplodon densirostris',
-    guild: 'MARINE',
-    colorHex: '#22d3ee',
-    iucnStatus: 'LC',
-    summaryExtract:
-      'Deep-diving ziphiid cetacean tracked off the leeward slope of Hawaiʻi Island using Argos SPOT5 satellite-linked telemetry.',
-    attribution: {
-      studyTitle:
-        "Blainville's beaked whale (Mesoplodon densirostris) Hawaiʻi telemetry (PTT 94821)",
-      principalInvestigators: 'Robin W. Baird',
-      institution: 'Cascadia Research Collective / IOOS ATN',
-      studyUrl:
-        'https://atn.ioos.us/erddap/tabledap/atn_94821_blainvilles-beaked-whale_trajectory_20091221-20100111.html',
-      licenseTerms:
-        'IOOS Animal Telemetry Network (ATN) public dataset. Acknowledge Cascadia Research Collective & IOOS ATN.',
-      licenseMd5Required: false,
-    },
-  },
-  {
-    datasetId:
-      'atn_85568_short-finned-pilot-whale_trajectory_20080705-20080802',
-    animalId: 'atn-85568',
-    nickname: 'Kona Pilot #85568',
-    commonName: 'Short-finned Pilot Whale',
-    scientificName: 'Globicephala macrorhynchus',
-    guild: 'MARINE',
-    colorHex: '#818cf8',
-    iucnStatus: 'LC',
-    summaryExtract:
-      'Island-associated delphinid tracked along deep pelagic escarpments off Hawaiʻi via Argos satellite telemetry.',
-    attribution: {
-      studyTitle:
-        'Short-finned pilot whale (Globicephala macrorhynchus) Hawaiʻi telemetry (PTT 85568)',
-      principalInvestigators: 'Robin W. Baird',
-      institution: 'Cascadia Research Collective / IOOS ATN',
-      studyUrl:
-        'https://atn.ioos.us/erddap/tabledap/atn_85568_short-finned-pilot-whale_trajectory_20080705-20080802.html',
-      licenseTerms:
-        'IOOS Animal Telemetry Network (ATN) public dataset. Acknowledge Cascadia Research Collective & IOOS ATN.',
-      licenseMd5Required: false,
-    },
-  },
-];
 
 const FEED_PRIORITY: Record<FeedStatus, number> = {
   LIVE_API: 3,
@@ -196,8 +110,111 @@ function parseStringOrFallback(value: unknown, fallback: string): string {
   return fallback;
 }
 
+function parseCleanFieldString(value: unknown): string {
+  if (typeof value === 'string') {
+    const trimmed = value.trim();
+    const lower = trimmed.toLowerCase();
+    if (!trimmed || lower === 'null' || lower === 'not specified') {
+      return '';
+    }
+    return trimmed;
+  }
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    return String(value);
+  }
+  return '';
+}
+
+const ATN_SPECIES_ECOLOGY_HINTS: Record<
+  string,
+  {
+    order: string;
+    family: string;
+    photoUrl: string;
+    photoAttribution: string;
+    wikiUrl: string;
+  }
+> = {
+  'Phoca largha': {
+    order: 'Carnivora',
+    family: 'Phocidae',
+    photoUrl:
+      'https://thumb.wikimedia.org/wikipedia/commons/thumb/7/77/Spotted_seal_mother_and_pup_in_the_Bering_Sea.jpg/330px-Spotted_seal_mother_and_pup_in_the_Bering_Sea.jpg?utm_source=en.wikipedia.org&utm_campaign=api&utm_content=thumbnail',
+    photoAttribution: 'Wikimedia Commons / NOAA Bering Sea',
+    wikiUrl: 'https://en.wikipedia.org/wiki/Spotted_seal',
+  },
+  'Mesoplodon densirostris': {
+    order: 'Artiodactyla',
+    family: 'Ziphiidae',
+    photoUrl:
+      'https://thumb.wikimedia.org/wikipedia/commons/thumb/c/c6/Blainville%27s_beaked_whale_size.svg/330px-Blainville%27s_beaked_whale_size.svg.png?utm_source=en.wikipedia.org&utm_campaign=api&utm_content=thumbnail',
+    photoAttribution: 'Wikimedia Commons',
+    wikiUrl: "https://en.wikipedia.org/wiki/Blainville's_beaked_whale",
+  },
+  'Globicephala macrorhynchus': {
+    order: 'Artiodactyla',
+    family: 'Delphinidae',
+    photoUrl:
+      'https://thumb.wikimedia.org/wikipedia/commons/thumb/d/d5/Globicephala_macrorhynchus_Kurzflossen-Grindwal_DSCF8148.JPG/330px-Globicephala_macrorhynchus_Kurzflossen-Grindwal_DSCF8148.JPG?utm_source=en.wikipedia.org&utm_campaign=api&utm_content=thumbnail',
+    photoAttribution: 'Wikimedia Commons',
+    wikiUrl: 'https://en.wikipedia.org/wiki/Short-finned_pilot_whale',
+  },
+  'Erignathus barbatus': {
+    order: 'Carnivora',
+    family: 'Phocidae',
+    photoUrl:
+      'https://thumb.wikimedia.org/wikipedia/commons/thumb/7/78/Bearded_Seal.jpg/330px-Bearded_Seal.jpg?utm_source=en.wikipedia.org&utm_campaign=api&utm_content=thumbnail',
+    photoAttribution: 'Wikimedia Commons',
+    wikiUrl: 'https://en.wikipedia.org/wiki/Bearded_seal',
+  },
+  'Pseudorca crassidens': {
+    order: 'Artiodactyla',
+    family: 'Delphinidae',
+    photoUrl:
+      'https://thumb.wikimedia.org/wikipedia/commons/thumb/9/99/Pseudoorca_Crassidens_-_False_Killer_Whale.jpg/330px-Pseudoorca_Crassidens_-_False_Killer_Whale.jpg?utm_source=en.wikipedia.org&utm_campaign=api&utm_content=thumbnail',
+    photoAttribution: 'Wikimedia Commons',
+    wikiUrl: 'https://en.wikipedia.org/wiki/False_killer_whale',
+  },
+  'Phoca vitulina': {
+    order: 'Carnivora',
+    family: 'Phocidae',
+    photoUrl:
+      'https://thumb.wikimedia.org/wikipedia/commons/thumb/4/48/Common_seal_%28Phoca_vitulina%29_2.jpg/330px-Common_seal_%28Phoca_vitulina%29_2.jpg?utm_source=en.wikipedia.org&utm_campaign=api&utm_content=thumbnail',
+    photoAttribution: 'Wikimedia Commons',
+    wikiUrl: 'https://en.wikipedia.org/wiki/Harbor_seal',
+  },
+  'Histriophoca fasciata': {
+    order: 'Carnivora',
+    family: 'Phocidae',
+    photoUrl:
+      'https://thumb.wikimedia.org/wikipedia/commons/thumb/a/a3/Ribbon-seal-male_Josh_London_NOAAedit_%2816086029928%29_%28cropped%29.jpg/330px-Ribbon-seal-male_Josh_London_NOAAedit_%2816086029928%29_%28cropped%29.jpg?utm_source=en.wikipedia.org&utm_campaign=api&utm_content=thumbnail',
+    photoAttribution: 'Wikimedia Commons / Josh London (NOAA)',
+    wikiUrl: 'https://en.wikipedia.org/wiki/Ribbon_seal',
+  },
+};
+
+function resolveMarineTaxonomy(scientificName: string): {
+  order: string;
+  family: string;
+} {
+  const hint = ATN_SPECIES_ECOLOGY_HINTS[scientificName];
+  if (hint) return { order: hint.order, family: hint.family };
+  const lower = scientificName.toLowerCase();
+  if (
+    lower.includes('phoca') ||
+    lower.includes('erignathus') ||
+    lower.includes('histriophoca')
+  ) {
+    return { order: 'Carnivora', family: 'Phocidae' };
+  }
+  if (lower.includes('mesoplodon')) {
+    return { order: 'Artiodactyla', family: 'Ziphiidae' };
+  }
+  return { order: 'Artiodactyla', family: 'Delphinidae' };
+}
+
 function parseAtnErddapDossier(
-  descriptor: AtnDatasetDescriptor,
+  descriptor: CuratedAtnDatasetSpec,
   payload: RawErddapTableResponse,
 ): AnimalDossier | null {
   const cols = payload.table?.columnNames;
@@ -214,16 +231,20 @@ function parseAtnErddapDossier(
     return idx === undefined ? undefined : row[idx];
   };
 
-  let sex = 'Unknown';
-  let lifeStage = 'Adult';
+  let sex = 'unknown';
+  let lifeStage = 'adult';
   let massKg: number | null = null;
-  let localIdentifier = descriptor.animalId;
+  let localIdentifier = descriptor.id;
+  let hasResolvedLocalId = false;
   let taxonName = descriptor.scientificName;
   const fixes: TelemetryFix[] = [];
 
   for (let i = 0; i < rows.length; i += 1) {
     const row = rows[i];
     if (!Array.isArray(row)) continue;
+
+    const qartodLoc = parseNumberOrNull(getCell(row, 'qartod_location_flag'));
+    if (qartodLoc === 4) continue;
 
     const timeRaw = getCell(row, 'time');
     const lat = parseNumberOrNull(getCell(row, 'latitude'));
@@ -251,44 +272,47 @@ function parseAtnErddapDossier(
       getCell(row, 'type'),
       parseStringOrFallback(getCell(row, 'instrument_tag'), 'Argos'),
     );
-    const sensorType: SensorType = typeStr.toUpperCase().includes('GPS')
-      ? 'GPS-GSM'
-      : 'Argos Doppler PTT';
+    const combinedSensor = `${typeStr} ${parseStringOrFallback(getCell(row, 'instrument_tag'), '')}`.toLowerCase();
+    const sensorType: SensorType =
+      combinedSensor.includes('gps') || combinedSensor.includes('fastloc')
+        ? 'GPS-GSM'
+        : combinedSensor.includes('acoustic')
+          ? 'Acoustic / Archival'
+          : 'Argos Doppler PTT';
 
-    if (sex === 'Unknown') {
-      const candidateSex = parseStringOrFallback(
-        getCell(row, 'animal_sex'),
-        '',
-      );
-      if (candidateSex && candidateSex.toLowerCase() !== 'not specified') {
-        sex = candidateSex;
+    if (sex === 'unknown') {
+      const candidateSex = parseCleanFieldString(getCell(row, 'animal_sex'));
+      if (candidateSex) {
+        sex = candidateSex.toLowerCase();
       }
     }
-    if (lifeStage === 'Adult') {
-      const candidateStage = parseStringOrFallback(
+    if (lifeStage === 'adult') {
+      const candidateStage = parseCleanFieldString(
         getCell(row, 'animal_life_stage'),
-        '',
       );
       if (candidateStage) {
-        lifeStage = candidateStage;
+        lifeStage = candidateStage.toLowerCase();
       }
     }
     if (massKg === null) {
       const weight = parseNumberOrNull(getCell(row, 'animal_weight'));
       if (weight !== null && weight > 0) massKg = weight;
     }
-    if (localIdentifier === descriptor.animalId) {
-      const candidateId = parseStringOrFallback(
-        getCell(row, 'ptt'),
-        parseStringOrFallback(getCell(row, 'deploy_id'), ''),
-      );
-      if (candidateId) localIdentifier = candidateId;
+    if (!hasResolvedLocalId) {
+      const candidateId =
+        parseCleanFieldString(getCell(row, 'animal')) ||
+        parseCleanFieldString(getCell(row, 'deploy_id')) ||
+        parseCleanFieldString(getCell(row, 'ptt'));
+      if (candidateId) {
+        localIdentifier = candidateId;
+        hasResolvedLocalId = true;
+      }
     }
-    const rowTaxon = parseStringOrFallback(getCell(row, 'taxon_name'), '');
+    const rowTaxon = parseCleanFieldString(getCell(row, 'taxon_name'));
     if (rowTaxon) taxonName = rowTaxon;
 
     fixes.push({
-      id: `${descriptor.animalId}-${i}`,
+      id: `${descriptor.id}-${i}`,
       timestamp: timeRaw,
       timestampMs,
       lat,
@@ -314,9 +338,11 @@ function parseAtnErddapDossier(
   const latestFix = fixes[fixes.length - 1]!;
   const parts = taxonName.split(/\s+/);
   const genus = parts[0] ?? '';
+  const species = parts[1] ?? taxonName;
+  const taxonomyOrderFamily = resolveMarineTaxonomy(taxonName);
 
   return {
-    id: descriptor.animalId,
+    id: descriptor.id,
     localIdentifier,
     nickname: descriptor.nickname,
     scientificName: taxonName,
@@ -349,28 +375,21 @@ function parseAtnErddapDossier(
       hasAltitudeOrDepth: fixes.some((f) => f.altitudeOrDepthMeters !== null),
     },
     ecology: {
-      photoUrl: null,
-      photoAttribution: null,
+      photoUrl: ATN_SPECIES_ECOLOGY_HINTS[taxonName]?.photoUrl ?? null,
+      photoAttribution:
+        ATN_SPECIES_ECOLOGY_HINTS[taxonName]?.photoAttribution ?? null,
       iucnStatus: descriptor.iucnStatus,
       taxonomy: {
         kingdom: 'Animalia',
         phylum: 'Chordata',
         class: 'Mammalia',
-        order:
-          descriptor.scientificName === 'Phoca largha'
-            ? 'Carnivora'
-            : 'Cetartiodactyla',
-        family:
-          descriptor.scientificName === 'Phoca largha'
-            ? 'Phocidae'
-            : descriptor.scientificName === 'Mesoplodon densirostris'
-              ? 'Ziphiidae'
-              : 'Delphinidae',
+        order: taxonomyOrderFamily.order,
+        family: taxonomyOrderFamily.family,
         genus,
-        species: taxonName,
+        species,
       },
       summaryExtract: descriptor.summaryExtract,
-      wikiUrl: null,
+      wikiUrl: ATN_SPECIES_ECOLOGY_HINTS[taxonName]?.wikiUrl ?? null,
       enriched: false,
     },
     environment: {
@@ -384,13 +403,10 @@ function parseAtnErddapDossier(
       oceanCurrentKmh: null,
       solarPhase: 'Daylight',
       solarElevationDeg: 0,
-      regionLabel:
-        descriptor.scientificName === 'Phoca largha'
-          ? 'Bering Sea'
-          : 'Central North Pacific (Hawaiʻi)',
+      regionLabel: descriptor.regionLabel,
       fetchedAt: null,
     },
-    attribution: descriptor.attribution,
+    attribution: { ...descriptor.attribution },
   };
 }
 
@@ -491,24 +507,89 @@ export function shiftDemoFeedTimestamps(
   });
 }
 
-function mergeAndDedupeFleet(
+function normalizeIdKey(id: string): string {
+  return id.trim().toLowerCase();
+}
+
+function buildCompositeIdentityKey(animal: AnimalDossier): string | null {
+  const source = String(animal.sourceProvider ?? '').trim().toUpperCase();
+  const study = String(animal.studyId ?? '').trim().toLowerCase();
+  const local = String(animal.localIdentifier ?? '').trim().toLowerCase();
+  if (!source || !study || !local) return null;
+  return `${source}:${study}:${local}`;
+}
+
+export function mergeAndDedupeFleet(
   candidates: readonly AnimalDossier[],
 ): AnimalDossier[] {
-  const byId = new Map<string, AnimalDossier>();
-  for (const animal of candidates) {
-    if (!animal || !animal.id) continue;
-    const existing = byId.get(animal.id);
-    if (!existing) {
-      byId.set(animal.id, animal);
+  const slots: Array<AnimalDossier | null> = [];
+  const slotById = new Map<string, number>();
+  const slotByComposite = new Map<string, number>();
+
+  const registerKeys = (animal: AnimalDossier, idx: number): void => {
+    const idKey = normalizeIdKey(animal.id);
+    if (idKey) slotById.set(idKey, idx);
+    const compKey = buildCompositeIdentityKey(animal);
+    if (compKey) slotByComposite.set(compKey, idx);
+  };
+
+  for (const candidate of candidates) {
+    if (!candidate || !candidate.id) continue;
+    const idKey = normalizeIdKey(candidate.id);
+    if (!idKey) continue;
+    const compKey = buildCompositeIdentityKey(candidate);
+
+    const existingIdIdx = slotById.get(idKey);
+    const existingCompIdx = compKey ? slotByComposite.get(compKey) : undefined;
+
+    if (existingIdIdx === undefined && existingCompIdx === undefined) {
+      const idx = slots.length;
+      slots.push(candidate);
+      registerKeys(candidate, idx);
       continue;
     }
-    const existingPriority = FEED_PRIORITY[existing.feedStatus] ?? 0;
-    const incomingPriority = FEED_PRIORITY[animal.feedStatus] ?? 0;
-    if (incomingPriority > existingPriority) {
-      byId.set(animal.id, animal);
+
+    if (
+      existingIdIdx !== undefined &&
+      existingCompIdx !== undefined &&
+      existingIdIdx !== existingCompIdx
+    ) {
+      const a = slots[existingIdIdx];
+      const b = slots[existingCompIdx];
+      const winner = [a, b, candidate]
+        .filter((x): x is AnimalDossier => x !== null)
+        .reduce((best, cur) =>
+          (FEED_PRIORITY[cur.feedStatus] ?? 0) >
+          (FEED_PRIORITY[best.feedStatus] ?? 0)
+            ? cur
+            : best,
+        );
+      slots[existingIdIdx] = winner;
+      slots[existingCompIdx] = null;
+      if (a) registerKeys(a, existingIdIdx);
+      if (b) registerKeys(b, existingIdIdx);
+      registerKeys(candidate, existingIdIdx);
+      registerKeys(winner, existingIdIdx);
+      continue;
     }
+
+    const targetIdx = existingIdIdx ?? existingCompIdx!;
+    const existing = slots[targetIdx];
+    if (!existing) {
+      slots[targetIdx] = candidate;
+      registerKeys(candidate, targetIdx);
+      continue;
+    }
+
+    const existingPriority = FEED_PRIORITY[existing.feedStatus] ?? 0;
+    const incomingPriority = FEED_PRIORITY[candidate.feedStatus] ?? 0;
+    if (incomingPriority > existingPriority) {
+      slots[targetIdx] = candidate;
+    }
+    registerKeys(candidate, targetIdx);
   }
-  return Array.from(byId.values());
+
+  return slots.filter((a): a is AnimalDossier => a !== null);
 }
 
 export class TelemetryClient {
@@ -548,9 +629,6 @@ export class TelemetryClient {
     referenceNowMs: number,
   ): Promise<AnimalDossier[]> {
     if (this.skipWorker) {
-      const { normalizeFleetBatch } = await import(
-        '../workers/kinematics.worker'
-      );
       return normalizeFleetBatch(animals, referenceNowMs);
     }
     return kinematicsBridge.normalizeFleet(animals, referenceNowMs);
@@ -624,7 +702,7 @@ export class TelemetryClient {
 
   private async fetchDirectAtnErddap(): Promise<AnimalDossier[]> {
     const results = await Promise.allSettled(
-      ATN_CURATED_DATASETS.map(async (descriptor) => {
+      CURATED_ATN_DATASETS.map(async (descriptor) => {
         const url = `https://atn.ioos.us/erddap/tabledap/${descriptor.datasetId}.json?&orderByLimit(%22160%22)`;
         const raw = await fetchJsonWithTimeout<RawErddapTableResponse>(
           url,

@@ -83,7 +83,7 @@ node scripts/serve-subpath-preview.mjs
 ### Additional Scripts
 | Command | Purpose |
 | :--- | :--- |
-| `npm run seed:generate` | Regenerate the 10-animal, 1,500-fix `public/data/fallback-fleet.json` archive |
+| `npm run seed:generate` | Regenerate the 27-animal, 3,240-fix `public/data/fallback-fleet.json` archive |
 | `npm run harvest:telemetry` | Run `TelemetryProvider` to produce `public/data/ci-live-snapshot.json` |
 | `npm run typecheck` | Run strict TypeScript checks (`tsconfig.app.json` + `tsconfig.server.json`) |
 | `npm test` | Execute the Vitest unit test suite |
@@ -137,13 +137,13 @@ Every animal card and Bio-Dossier displays its exact provenance badge (`LIVE API
 | Tier / Service | Source & Endpoint | Role in WildPulse |
 | :--- | :--- | :--- |
 | **Tier 1 (Proxy)** | `./api/health`, `./api/fleet`, `./api/studies/:studyId`, `./api/atn/marine` | Local Express Mission Control with serialized Movebank queue & disk/memory TTL cache (`PROXY_LIVE`) |
-| **Tier 2 (CI Snapshot)** | `./data/ci-live-snapshot.json` | 6-hour scheduled GitHub Actions telemetry snapshot (`CACHED` / `CI_SNAPSHOT`) |
-| **Tier 3 (Browser CORS)** | IOOS ATN ERDDAP (`https://atn.ioos.us/erddap/`) | Direct browser marine deployments (NOAA AFSC & Cascadia Research Collective) (`LIVE_API`) |
-| **Tier 4 (Seed Fallback)** | `./data/fallback-fleet.json` | 10 multi-guild animals (1,500 fixes, `±180°` antimeridian crossings, dive/altitude profiles) (`DEMO_FEED`) |
+| **Tier 2 (CI Snapshot)** | `./data/ci-live-snapshot.json` | 6-hour scheduled GitHub Actions telemetry snapshot (`8` live individuals across Movebank + ATN ERDDAP) (`CACHED` / `CI_SNAPSHOT`) |
+| **Tier 3 (Browser CORS)** | IOOS ATN ERDDAP (`https://atn.ioos.us/erddap/`) | Direct browser marine deployments across 7 Arctic & Pacific marine species (`LIVE_API`) |
+| **Tier 4 (Seed Fallback)** | `./data/fallback-fleet.json` | 27 multi-guild animals (3,240 fixes, `±180°` antimeridian crossings, dive/altitude profiles) (`DEMO_FEED`) |
 | **Weather & Marine** | Open-Meteo Forecast & Open-Meteo Marine | Ambient air temp, wind speed/direction, pressure, elevation, SST, wave height, ocean currents |
 | **Species Ecology** | iNaturalist, GBIF, Wikipedia REST Summary API | Verified taxonomic hierarchy, species photography, conservation extracts, IUCN context |
 | **Location & Solar** | BigDataCloud Reverse Geocode + Solar Math | Region/ocean basin labels and deterministic solar elevation & phase (`Daylight`, `Twilight`, `Night`) |
-| **Map Basemaps** | CARTO Dark Matter, Esri World Imagery/Ocean, OpenTopoMap | 4 keyless MapLibre GL JS styles preserving active telemetry layers across switches |
+| **Map Basemaps** | OpenFreeMap Vector Dark + Esri Dark Gray, Imagery, Topo, Hillshade, Ocean | Unified keyless MapLibre GL JS multi-basemap style with non-destructive instant switching |
 
 ---
 

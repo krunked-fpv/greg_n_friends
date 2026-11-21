@@ -1,3 +1,7 @@
+import {
+  CURATED_ATN_DATASETS,
+  type CuratedAtnDatasetSpec,
+} from '../../src/data/curatedAtnDatasets.ts';
 import type { AnimalDossier, SensorType } from '../../src/types/telemetry.ts';
 import {
   argosAccuracyMeters,
@@ -11,74 +15,7 @@ import {
 
 export const DEFAULT_ATN_ERDDAP_BASE_URL = 'https://atn.ioos.us/erddap/tabledap';
 
-export interface AtnDatasetSpec {
-  datasetId: string;
-  id: string;
-  nickname: string;
-  commonName: string;
-  scientificName: string;
-  colorHex: string;
-  regionLabel: string;
-  studyTitle: string;
-  principalInvestigators: string;
-  institution: string;
-  studyUrl: string;
-  licenseTerms: string;
-}
-
-export const ATN_CURATED_DATASETS: AtnDatasetSpec[] = [
-  {
-    datasetId: 'atn_174822_spotted-seal_trajectory_20180414-20181103',
-    id: 'atn-174822-spotted-seal',
-    nickname: 'Bering Seal PL2018 (PTT 174822)',
-    commonName: 'Spotted Seal',
-    scientificName: 'Phoca largha',
-    colorHex: '#2dd4bf',
-    regionLabel: 'Bering Sea, North Pacific',
-    studyTitle: 'Bering Sea Spotted & Ribbon Seal Telemetry (PTT 174822)',
-    principalInvestigators:
-      'Josh London, Stacie Koslovsky, Michael Cameron, Peter Boveng, Heather Ziel',
-    institution: 'NOAA Alaska Fisheries Science Center (Marine Mammal Laboratory)',
-    studyUrl:
-      'https://portal.atn.ioos.us/#metadata/70c76508-b252-4c3d-9f27-e4cba9300537/project',
-    licenseTerms:
-      'IOOS Animal Telemetry Network (ATN) Open Scientific Data — Acknowledge NOAA AFSC & US IOOS ATN.',
-  },
-  {
-    datasetId: 'atn_94821_blainvilles-beaked-whale_trajectory_20091221-20100111',
-    id: 'atn-94821-beaked-whale',
-    nickname: "HIMd168 Beaked Whale (PTT 94821)",
-    commonName: "Blainville's Beaked Whale",
-    scientificName: 'Mesoplodon densirostris',
-    colorHex: '#60a5fa',
-    regionLabel: "Hawai'i Island Basin, Central Pacific",
-    studyTitle: 'Odontocete Tagging in the Main Hawaiian Islands (PTT 94821)',
-    principalInvestigators:
-      'Robin Baird, M. Bradley Hanson, Gregory S. Schorr, Daniel L. Webster, Erin M. Oleson',
-    institution: 'Cascadia Research Collective / NOAA Fisheries',
-    studyUrl:
-      'https://portal.atn.ioos.us/#metadata/1f1ff520-a4f5-4425-9681-57396059f1c9/project',
-    licenseTerms:
-      'IOOS Animal Telemetry Network (ATN) Open Scientific Data — Acknowledge Cascadia Research Collective & US IOOS ATN.',
-  },
-  {
-    datasetId: 'atn_85568_short-finned-pilot-whale_trajectory_20080705-20080802',
-    id: 'atn-85568-pilot-whale',
-    nickname: 'HIGm0471 Pilot Whale (PTT 85568)',
-    commonName: 'Short-finned Pilot Whale',
-    scientificName: 'Globicephala macrorhynchus',
-    colorHex: '#38bdf8',
-    regionLabel: "Hawai'i Island Basin, Central Pacific",
-    studyTitle: 'Odontocete Tagging in the Main Hawaiian Islands (PTT 85568)',
-    principalInvestigators:
-      'Robin Baird, M. Bradley Hanson, Gregory S. Schorr, Daniel L. Webster, Erin M. Oleson',
-    institution: 'Cascadia Research Collective / NOAA Fisheries',
-    studyUrl:
-      'https://portal.atn.ioos.us/#metadata/1f1ff520-a4f5-4425-9681-57396059f1c9/project',
-    licenseTerms:
-      'IOOS Animal Telemetry Network (ATN) Open Scientific Data — Acknowledge Cascadia Research Collective & US IOOS ATN.',
-  },
-];
+export { CURATED_ATN_DATASETS, type CuratedAtnDatasetSpec };
 
 export interface ErddapTableJson {
   table?: {
@@ -144,7 +81,7 @@ export class AtnErddapProvider {
   }
 
   public parseDatasetResponse(
-    spec: AtnDatasetSpec,
+    spec: CuratedAtnDatasetSpec,
     payload: ErddapTableJson,
     referenceNowMs: number = Date.now(),
   ): AnimalDossier | null {
@@ -220,18 +157,23 @@ export class AtnErddapProvider {
       });
     }
 
-    const fixes = normalizeTelemetryFixes(spec.id, rawFixes, 'MARINE');
+    const fixes = normalizeTelemetryFixes(spec.id, rawFixes, spec.guild);
     if (fixes.length === 0) return null;
 
     const latestFix = fixes[fixes.length - 1];
     const kinematics = computeAnimalKinematics(fixes, referenceNowMs);
-    const ecology = buildDefaultEcology(scientificName);
+    const defaultEcology = buildDefaultEcology(scientificName);
+    const ecology = {
+      ...defaultEcology,
+      iucnStatus: spec.iucnStatus ?? defaultEcology.iucnStatus,
+      summaryExtract: spec.summaryExtract || defaultEcology.summaryExtract,
+    };
     const environment = buildDefaultEnvironment(
       latestFix.lat,
       latestFix.lon,
       latestFix.timestampMs,
       spec.regionLabel,
-      'MARINE',
+      spec.guild,
       latestFix.altitudeOrDepthMeters,
       latestFix.externalTempC,
     );
@@ -242,7 +184,7 @@ export class AtnErddapProvider {
       nickname: spec.nickname,
       scientificName,
       commonName: spec.commonName,
-      guild: 'MARINE',
+      guild: spec.guild,
       sex,
       lifeStage,
       massKg,
@@ -257,19 +199,12 @@ export class AtnErddapProvider {
       kinematics,
       ecology,
       environment,
-      attribution: {
-        studyTitle: spec.studyTitle,
-        principalInvestigators: spec.principalInvestigators,
-        institution: spec.institution,
-        studyUrl: spec.studyUrl,
-        licenseTerms: spec.licenseTerms,
-        licenseMd5Required: false,
-      },
+      attribution: { ...spec.attribution },
     };
   }
 
   public async fetchDataset(
-    spec: AtnDatasetSpec,
+    spec: CuratedAtnDatasetSpec,
     referenceNowMs: number = Date.now(),
   ): Promise<AnimalDossier | null> {
     const url = this.buildDatasetUrl(spec.datasetId);
@@ -291,7 +226,7 @@ export class AtnErddapProvider {
     referenceNowMs: number = Date.now(),
   ): Promise<AnimalDossier[]> {
     const settled = await Promise.allSettled(
-      ATN_CURATED_DATASETS.map((spec) => this.fetchDataset(spec, referenceNowMs)),
+      CURATED_ATN_DATASETS.map((spec) => this.fetchDataset(spec, referenceNowMs)),
     );
 
     const animals: AnimalDossier[] = [];

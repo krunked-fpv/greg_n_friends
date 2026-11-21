@@ -28,6 +28,97 @@ export interface TelemetryProviderOptions {
   fallbackFleetPath?: string;
 }
 
+const FEED_PRIORITY: Record<FeedStatus, number> = {
+  LIVE_API: 3,
+  CACHED: 2,
+  DEMO_FEED: 1,
+};
+
+function normalizeIdKey(id: string): string {
+  return id.trim().toLowerCase();
+}
+
+function buildCompositeIdentityKey(animal: AnimalDossier): string | null {
+  const source = String(animal.sourceProvider ?? '').trim().toUpperCase();
+  const study = String(animal.studyId ?? '').trim().toLowerCase();
+  const local = String(animal.localIdentifier ?? '').trim().toLowerCase();
+  if (!source || !study || !local) return null;
+  return `${source}:${study}:${local}`;
+}
+
+export function dedupeFleetByPriority(
+  candidates: readonly AnimalDossier[],
+): AnimalDossier[] {
+  const slots: Array<AnimalDossier | null> = [];
+  const slotById = new Map<string, number>();
+  const slotByComposite = new Map<string, number>();
+
+  const registerKeys = (animal: AnimalDossier, idx: number): void => {
+    const idKey = normalizeIdKey(animal.id);
+    if (idKey) slotById.set(idKey, idx);
+    const compKey = buildCompositeIdentityKey(animal);
+    if (compKey) slotByComposite.set(compKey, idx);
+  };
+
+  for (const candidate of candidates) {
+    if (!candidate || !candidate.id) continue;
+    const idKey = normalizeIdKey(candidate.id);
+    if (!idKey) continue;
+    const compKey = buildCompositeIdentityKey(candidate);
+
+    const existingIdIdx = slotById.get(idKey);
+    const existingCompIdx = compKey ? slotByComposite.get(compKey) : undefined;
+
+    if (existingIdIdx === undefined && existingCompIdx === undefined) {
+      const idx = slots.length;
+      slots.push(candidate);
+      registerKeys(candidate, idx);
+      continue;
+    }
+
+    if (
+      existingIdIdx !== undefined &&
+      existingCompIdx !== undefined &&
+      existingIdIdx !== existingCompIdx
+    ) {
+      const a = slots[existingIdIdx];
+      const b = slots[existingCompIdx];
+      const winner = [a, b, candidate]
+        .filter((x): x is AnimalDossier => x !== null)
+        .reduce((best, cur) =>
+          (FEED_PRIORITY[cur.feedStatus] ?? 0) >
+          (FEED_PRIORITY[best.feedStatus] ?? 0)
+            ? cur
+            : best,
+        );
+      slots[existingIdIdx] = winner;
+      slots[existingCompIdx] = null;
+      if (a) registerKeys(a, existingIdIdx);
+      if (b) registerKeys(b, existingIdIdx);
+      registerKeys(candidate, existingIdIdx);
+      registerKeys(winner, existingIdIdx);
+      continue;
+    }
+
+    const targetIdx = existingIdIdx ?? existingCompIdx!;
+    const existing = slots[targetIdx];
+    if (!existing) {
+      slots[targetIdx] = candidate;
+      registerKeys(candidate, targetIdx);
+      continue;
+    }
+
+    const existingPriority = FEED_PRIORITY[existing.feedStatus] ?? 0;
+    const incomingPriority = FEED_PRIORITY[candidate.feedStatus] ?? 0;
+    if (incomingPriority > existingPriority) {
+      slots[targetIdx] = candidate;
+    }
+    registerKeys(candidate, targetIdx);
+  }
+
+  return slots.filter((a): a is AnimalDossier => a !== null);
+}
+
 function withRefreshedFeedAndFreshness(
   animals: AnimalDossier[],
   targetFeedStatus: FeedStatus,
@@ -242,21 +333,19 @@ export class TelemetryProvider {
       includeDemo ? this.loadFallbackDemoAnimals(nowMs) : Promise.resolve([]),
     ]);
 
-    const merged = new Map<string, AnimalDossier>();
+    const candidates: AnimalDossier[] = [];
 
     if (mbRes.status === 'fulfilled') {
-      for (const a of mbRes.value) merged.set(a.id, a);
+      candidates.push(...mbRes.value);
     }
     if (atnRes.status === 'fulfilled') {
-      for (const a of atnRes.value.animals) merged.set(a.id, a);
+      candidates.push(...atnRes.value.animals);
     }
     if (demoRes.status === 'fulfilled') {
-      for (const a of demoRes.value) {
-        if (!merged.has(a.id)) merged.set(a.id, a);
-      }
+      candidates.push(...demoRes.value);
     }
 
-    return buildFleetResponse(Array.from(merged.values()), 'PROXY_LIVE', nowMs);
+    return buildFleetResponse(dedupeFleetByPriority(candidates), 'PROXY_LIVE', nowMs);
   }
 
   public async harvestUpstreamSnapshot(): Promise<{
@@ -300,7 +389,7 @@ export class TelemetryProvider {
     }
 
     return {
-      fleet: buildFleetResponse(harvested, 'CI_SNAPSHOT', nowMs),
+      fleet: buildFleetResponse(dedupeFleetByPriority(harvested), 'CI_SNAPSHOT', nowMs),
       warnings,
     };
   }

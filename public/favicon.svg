@@ -1,0 +1,57 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64" role="img" aria-label="WildPulse Bio-Telemetry Emblem">
+  <defs>
+    <radialGradient id="obsidianBg" cx="50%" cy="42%" r="65%">
+      <stop offset="0%" stop-color="#0c1525" />
+      <stop offset="65%" stop-color="#080e1a" />
+      <stop offset="100%" stop-color="#04070d" />
+    </radialGradient>
+    <linearGradient id="radarSweep" x1="50%" y1="50%" x2="88%" y2="14%">
+      <stop offset="0%" stop-color="#22d3ee" stop-opacity="0.05" />
+      <stop offset="60%" stop-color="#22d3ee" stop-opacity="0.22" />
+      <stop offset="100%" stop-color="#10b981" stop-opacity="0.48" />
+    </linearGradient>
+    <linearGradient id="trackArc" x1="12%" y1="78%" x2="86%" y2="24%">
+      <stop offset="0%" stop-color="#10b981" />
+      <stop offset="55%" stop-color="#22d3ee" />
+      <stop offset="100%" stop-color="#67e8f9" />
+    </linearGradient>
+    <radialGradient id="beaconGlow" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#67e8f9" stop-opacity="0.95" />
+      <stop offset="45%" stop-color="#22d3ee" stop-opacity="0.45" />
+      <stop offset="100%" stop-color="#22d3ee" stop-opacity="0" />
+    </radialGradient>
+  </defs>
+
+  <!-- Obsidian Command Badge -->
+  <rect x="2" y="2" width="60" height="60" rx="14" fill="url(#obsidianBg)" stroke="#1e3a5f" stroke-width="1.5" />
+  <rect x="4" y="4" width="56" height="56" rx="12" fill="none" stroke="#22d3ee" stroke-opacity="0.18" stroke-width="0.75" />
+
+  <!-- Subtle Tactical Crosshairs -->
+  <line x1="32" y1="8" x2="32" y2="56" stroke="#1e293b" stroke-width="1" stroke-dasharray="2 2.5" />
+  <line x1="8" y1="32" x2="56" y2="32" stroke="#1e293b" stroke-width="1" stroke-dasharray="2 2.5" />
+
+  <!-- Radar Sweep Sector (Upper-Right Quadrant) -->
+  <path d="M 32 32 L 32 10 A 22 22 0 0 1 51.05 21 Z" fill="url(#radarSweep)" />
+
+  <!-- Concentric Radar-Pulse Rings -->
+  <circle cx="32" cy="32" r="22" fill="none" stroke="#22d3ee" stroke-opacity="0.32" stroke-width="1.4" />
+  <circle cx="32" cy="32" r="14.5" fill="none" stroke="#10b981" stroke-opacity="0.58" stroke-width="1.5" />
+  <circle cx="32" cy="32" r="7" fill="none" stroke="#22d3ee" stroke-opacity="0.82" stroke-width="1.6" />
+
+  <!-- Geodesic Migration Trajectory Arc -->
+  <path
+    d="M 14 45 C 20 35, 25 36, 32 32 C 39 28, 42 19, 48 18"
+    fill="none"
+    stroke="url(#trackArc)"
+    stroke-width="2.4"
+    stroke-linecap="round"
+  />
+
+  <!-- Waypoint Fix & Active Head Beacon -->
+  <circle cx="14" cy="45" r="2.2" fill="#10b981" />
+  <circle cx="48" cy="18" r="3" fill="#22d3ee" stroke="#04070d" stroke-width="1" />
+
+  <!-- Central Radar Pulse Core -->
+  <circle cx="32" cy="32" r="6" fill="url(#beaconGlow)" />
+  <circle cx="32" cy="32" r="2.8" fill="#22d3ee" stroke="#ecfeff" stroke-width="0.9" />
+</svg>

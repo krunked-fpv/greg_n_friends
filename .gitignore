@@ -20,3 +20,4 @@ test-results/
 *.md
 !README.md
 dna/
+export-dna.ts

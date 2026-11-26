@@ -17,3 +17,5 @@ test-results/
 *.bak
 *.tmp
 *.log
+*.md
+!README.md
